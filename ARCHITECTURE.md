@@ -131,4 +131,13 @@ Zustand y lo que consume el compilador. Incluye `schemaVersion` para migraciones
   `responsive`/`hoverStyles`, `nodeType`, `patternMeta`/`isTemplate`, `rawHtml`,
   y un envoltorio `PageAst`/`ProjectAst`. `dynamicMapping` pasó de `string` a un
   objeto `{ tag, token, settings }` (superset del ejemplo `[post_title]`).
-  Config de Vitest en `.mts` (ESM). **Pendiente: validación de `types.ts`.**
+  Config de Vitest en `.mts` (ESM). **`types.ts` VALIDADO por el usuario.**
+- **2026-08-18** — Pilar 1 (Global Design System Extractor):
+  `lib/parser/global-system.ts` con `extractGlobalSystem(css)` →
+  `GlobalSystemAst` (colores desde vars `:root`, tipografías desde h1-h6/body/p,
+  cascada last-wins, ignora `@media` para la base, tolerante a CSS roto). Se usa
+  `postcss` (movido a dependencies) para parsear CSS y `cheerio` para
+  `collectStyleCss`. IDs inyectables (`idFactory`) para tests deterministas; la
+  salida se valida contra `GlobalSystemAstSchema`. Reordenado el plan: los
+  fixtures/schemas de Elementor se posponen a la fase del Compiler (Pilar 5),
+  que sí requiere JSON reales. **Pendiente: validación del extractor.**

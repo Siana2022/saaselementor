@@ -1,64 +1,66 @@
 # TODO.md — HTML → Elementor SaaS AI
 
 ## Estado actual
-**FASE: PASO 1 — Andamiaje + diseño del AST.**
-⏸️ **BLOQUEADO esperando validación del usuario sobre `lib/core/ast/types.ts`.**
-(Instrucción explícita: detenerse antes de desarrollar los parsers.)
+**FASE: PASO 2 — Pilar 1: Global Design System Extractor.**
+⏸️ **BLOQUEADO esperando validación del usuario sobre el extractor.**
+
+> Nota de orden: los fixtures/schemas de Elementor se han movido a la fase del
+> Compiler (Pilar 5), porque solo son necesarios para la salida AST→Elementor y
+> requieren JSON reales que aportará el usuario. Las fases HTML/CSS→AST (Pilares
+> 1 y 2) no los necesitan y avanzan primero.
 
 ---
 
-## PASO 1 — Andamiaje y AST  ✅ (a la espera de validación)
-- [x] Inicializar repositorio git (branch `main`).
-- [x] Base Next.js 16 (App Router) + TypeScript 6 strict + Tailwind v4.
-- [x] Instalar Zustand, Zod, Vitest (+ cheerio, jsdom, @anthropic-ai/sdk, uuid).
-- [x] Configurar Vitest (entorno jsdom, alias `@`).
-- [x] `ARCHITECTURE.md` y `TODO.md`.
-- [x] `lib/core/ast/types.ts` — AST (nodo + `GlobalSystemAst` + `ProjectAst`)
-      con Zod + TS: `elementorRole`, pattern matching, `dynamicMapping`,
-      `globalRefs`.
-- [x] Tests de humo del AST (8 tests, verdes).
-- [x] `next build` y `tsc --noEmit` verdes.
-- [ ] ⏳ **VALIDACIÓN DEL USUARIO sobre `types.ts`.**
+## PASO 1 — Andamiaje y AST  ✅ VALIDADO
+- [x] Repo git + Next.js 16 (App Router) + TS 6 strict + Tailwind v4.
+- [x] Zustand, Zod v4, Vitest (+ cheerio, jsdom, @anthropic-ai/sdk, uuid).
+- [x] `lib/core/ast/types.ts` (AstNode + GlobalSystemAst + ProjectAst).
+- [x] Tests de humo (8) + `ARCHITECTURE.md` + `TODO.md`.
+- [x] **Validado por el usuario.**
+
+## PASO 2 — Pilar 1: Global Design System Extractor  ✅ (a la espera de validación)
+- [x] `lib/parser/global-system.ts`: `extractGlobalSystem(css)` → `GlobalSystemAst`.
+  - [x] Variables `:root` → `rootVariables` (+ `GlobalColor` si son color).
+  - [x] Derivación de nombres de color desde la custom property.
+  - [x] Tipografías desde h1-h6 / body / p (cascada last-wins, ignora @media).
+  - [x] `meta.fontFamilies` (familias únicas).
+  - [x] Tolerancia a CSS roto (nota en `meta.notes`, sin excepción).
+  - [x] `collectStyleCss(html)` para reunir el CSS de los `<style>`.
+- [x] Tests (11) verdes; `tsc` + salida validada contra Zod.
+- [ ] ⏳ **VALIDACIÓN DEL USUARIO.**
 
 ---
 
-## Próximas fases (no iniciar hasta validar el PASO 1)
+## Próximas fases (no iniciar hasta validar el PASO 2)
 
-### PASO 2 — Fixtures & schemas de Elementor (ingeniería inversa)
-- [ ] Definir estructura `fixtures/` (kit + widgets reales exportados).
-- [ ] `scripts/analyze-fixture.ts` → deriva schemas Zod desde JSON real.
-- [ ] Schemas Zod del esquema propietario de Elementor (widget, section, kit).
-
-### PASO 3 — Pilar 1: Global Design System Extractor
-- [ ] Parser de CSS (`:root`, `h1-h6`, clases globales) → `GlobalSystemAst`.
-- [ ] Generación de `elementor-kit.json`.
-- [ ] Tests: CSS de entrada → GlobalSystemAst esperado.
-
-### PASO 4 — Pilar 2: Ingesta de páginas + Pattern Matching
-- [ ] `lib/parser/` HTML → AST base (cheerio/jsdom).
-- [ ] Inferencia de `elementorRole`.
-- [ ] Pattern matching (≥3 hijos idénticos → loop/repeater candidate).
-- [ ] Fallback `html_widget` para estructuras indescifrables.
+### PASO 3 — Pilar 2: Ingesta de páginas + Pattern Matching
+- [ ] `lib/parser/html-to-ast.ts` HTML → AST base (cheerio/jsdom).
+- [ ] Inferencia de `elementorRole` por etiqueta/heurística.
+- [ ] Enlace de `globalRefs` contra el `GlobalSystemAst` (Fase 1).
+- [ ] Pattern matching (≥3 hijos idénticos → loop/repeater candidate + plantilla).
+- [ ] Fallback `html_widget` (+ `rawHtml`) para estructuras indescifrables.
 - [ ] Tests: fixtures HTML → AST esperado.
 
-### PASO 5 — Pilar 3: Visualizador en tiempo real
+### PASO 4 — Pilar 3: Visualizador en tiempo real
 - [ ] Store Zustand del `ProjectAst`.
 - [ ] Render del AST en `<iframe sandbox>`.
 - [ ] Selección de elementos → envía `id` al panel de chat.
 
-### PASO 6 — Pilar 4: AI Chat Controller
+### PASO 5 — Pilar 4: AI Chat Controller
 - [ ] Schema Zod de mutaciones (JSON Patch: updateRole, updateStyle, ...).
-- [ ] Endpoint/route Claude API (prompt + fragmento AST + id).
-- [ ] Aplicación de mutaciones validadas → Zustand → repintado.
+- [ ] Route Claude API (prompt + fragmento AST + id).
+- [ ] Aplicar mutaciones validadas → Zustand → repintado.
 - [ ] Tests: mutación → AST resultante.
 
-### PASO 7 — Pilar 5: Compiler & Exporter
-- [ ] AST → JSON de Elementor (referencias a globals del Kit).
-- [ ] Empaquetado ZIP: `manifest.json` + `kit.json` + `/templates/`.
-- [ ] Sub-templates de loops.
+### PASO 6 — Fixtures + Pilar 5: Compiler & Exporter
+- [ ] **(Requiere fixtures del usuario)** `fixtures/` con kit + widgets reales.
+- [ ] `scripts/analyze-fixture.ts` → derivar schemas Zod de Elementor.
+- [ ] AST → JSON de Elementor (widgets apuntan a globals del Kit).
+- [ ] `GlobalSystemAst` → `elementor-kit.json`.
+- [ ] Empaquetado ZIP: `manifest.json` + `kit.json` + `/templates/` (+ loops).
 - [ ] Tests: AST → JSON Elementor exacto (contra fixtures).
 
 ### Transversal
-- [ ] Ingesta de ZIP (subida de proyecto HTML/CSS).
+- [ ] Ingesta de ZIP (subida HTML/CSS + `<link>` externos).
 - [ ] UI del SaaS (lienzo + chat).
 - [ ] Autenticación / multi-proyecto (si aplica).
