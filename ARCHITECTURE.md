@@ -165,3 +165,34 @@ Cobertura: 56 tests (Vitest). `tsc --noEmit` y `next build` en verde.
 widgets de Elementor, el `manifest.json` y el `kit.json` son PROVISIONALES;
 se validarán/afinarán con JSON reales exportados. El fallback `html_widget`
 garantiza que ningún nodo rompa la importación mientras tanto.
+
+## 11. Validación con fixtures reales (2026-08-19)
+
+Se incorporaron 6 exports REALES de Elementor a `fixtures/pages/` (page, header,
+footer, archive, loop-item, popup) y se creó `scripts/analyze-fixture.ts`
+(`npm run analyze:fixtures`) que cataloga tipos de documento, censo de widgets y
+claves de `settings` (salida en `fixtures/analysis.json`).
+
+**Hallazgos que CONFIRMAN el diseño del compiler:**
+- Documento: `{content, page_settings, version:"0.4", title, type}`. `page_settings`
+  es `[]` cuando está vacío. `elType` sólo `container`/`widget` (Elementor flexbox).
+- `heading` → `{title, header_size}` + `__globals__.title_color` / `typography_typography`. ✓
+- `text-editor` → `{editor}` + `__globals__.text_color`. ✓
+- `button` → `{text, link:{url,is_external,nofollow,custom_attributes}}` + `button_text_color`. ✓
+- `image` → `{image:{url,id,alt,source,size}, image_size}`. (afinado)
+- Globales confirmados: `title_color, text_color, button_text_color, background_color, typography_typography` vía `__globals__` → `globals/colors?id=` y `globals/typography?id=`. ✓
+- Loop: `loop-grid` referencia su plantilla por `template_id` (+ `columns`); la
+  plantilla es un documento `type:"loop-item"`. Dynamic tags: `__dynamic__` con
+  formato `[elementor-tag id=... name=... settings=...]`.
+
+**Ajustes aplicados:** `page_settings:[]`; `image` con campos completos; compilación
+de `__dynamic__` desde `dynamicMapping`; loop_grid/repeater CONFIRMADOS → widget
+`loop-grid` real + doc `loop-item` (los candidatos heurísticos siguen como
+container estático hasta que la IA/usuario confirme). Test de compatibilidad:
+los 6 fixtures validan contra `ElementorDocumentSchema`.
+
+**Aún pendiente (requiere más fixtures):** export real de un **Kit** (ajustes del
+sitio) para clavar `kit.json` y los `_id` de system_colors/typography; y un
+**Template Kit .zip con `manifest.json`** para el formato del manifest. Además, el
+`template_id` del loop-grid es sintético (WordPress real necesita la plantilla
+guardada como post).

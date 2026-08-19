@@ -40,9 +40,10 @@ export const ElementorElementSchema: z.ZodType<ElementorElement> = z.lazy(() =>
 export const ElementorDocumentSchema = z.object({
   version: z.string(),
   title: z.string(),
-  type: z.string(), // "page" | "section" | "container" | "loop-item" ...
+  type: z.string(), // "page" | "section" | "container" | "loop-item" | "header" | "footer" | "archive" | "popup" ...
   content: z.array(ElementorElementSchema),
-  page_settings: ElementorSettingsSchema.default({}),
+  // Elementor exporta `[]` cuando no hay ajustes de página, u objeto si los hay.
+  page_settings: z.union([ElementorSettingsSchema, z.array(z.unknown())]).default([]),
 });
 export type ElementorDocument = z.infer<typeof ElementorDocumentSchema>;
 

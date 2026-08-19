@@ -4,6 +4,7 @@ import { compileKit, compileProject, compilePageDocument } from "../compile";
 import { buildFileMap, exportProjectZip } from "../export-zip";
 import { ElementorDocumentSchema, ElementorKitSchema } from "../elementor-types";
 import { buildProjectAst } from "@/lib/parser/html-to-ast";
+import { applyMutationsToProject } from "@/lib/core/mutations";
 import { parseAstNode, parseProjectAst, type GlobalSystemAst, type AstNode } from "@/lib/core/ast/types";
 
 function seededUuids() {
@@ -119,17 +120,44 @@ describe("globals wiring (__globals__)", () => {
 });
 
 describe("compileProject + export", () => {
-  it("genera kit + documento de página + sub-template de loop", () => {
+  it("loop_candidate se compila como container estático (sin loop-item)", () => {
     const card = `<article class="card"><img src="x"><h3>t</h3><p>d</p></article>`;
     const html = `<html><head><style>:root{--color-primary:#0af}</style></head><body><div class="grid">${card}${card}${card}</div></body></html>`;
     const project = buildProjectAst(html, { name: "home" }, { idFactory: seededUuids() });
 
     const bundle = compileProject(project, { elIdFactory: seededElIds() });
     expect(bundle.kit.settings.system_colors).toHaveLength(1);
-    const types = bundle.documents.map((d) => d.type);
-    expect(types).toContain("page");
-    expect(types).toContain("loop-item");
-    // todos los documentos validan contra el schema
+    expect(bundle.documents.map((d) => d.type)).toEqual(["page"]); // sin loop-item
+  });
+
+  it("loop_grid CONFIRMADO genera widget loop-grid + doc loop-item con template_id", () => {
+    const card = `<article class="card"><img src="x"><h3>t</h3><p>d</p></article>`;
+    const html = `<body><div class="grid">${card}${card}${card}</div></body>`;
+    let project = buildProjectAst(html, { name: "home" }, { idFactory: seededUuids() });
+
+    // Confirma el patrón como loop dinámico (lo que haría la IA en el Pilar 4).
+    const grid = project.pages[0]!.root.children.find((c) => c.classes.includes("grid"))!;
+    project = applyMutationsToProject(project, [
+      { action: "updateRole", id: grid.id, role: "loop_grid" },
+    ]).project;
+
+    const bundle = compileProject(project, { elIdFactory: seededElIds() });
+    const loopItem = bundle.documents.find((d) => d.type === "loop-item");
+    expect(loopItem).toBeDefined();
+
+    // localiza el widget loop-grid en el documento de página
+    const page = bundle.documents.find((d) => d.type === "page")!;
+    let loopGrid: unknown;
+    const walk = (els: { widgetType?: string; settings: Record<string, unknown>; elements: unknown[] }[]) => {
+      for (const el of els) {
+        if (el.widgetType === "loop-grid") loopGrid = el;
+        walk((el.elements as typeof els) ?? []);
+      }
+    };
+    walk(page.doc.content as never);
+    expect(loopGrid).toBeDefined();
+    expect((loopGrid as { settings: Record<string, unknown> }).settings.template_id).toBeDefined();
+    expect((loopGrid as { settings: Record<string, unknown> }).settings.columns).toBe("3");
     for (const d of bundle.documents) expect(ElementorDocumentSchema.parse(d.doc)).toBeTruthy();
   });
 

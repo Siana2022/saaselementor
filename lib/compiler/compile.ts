@@ -3,14 +3,17 @@
  *  PILAR 5 (b) — Compiler: AST -> Elementor JSON
  * =============================================================================
  *
- * Traduce el AST validado al esquema propietario de Elementor.
- *   - GlobalSystemAst -> Kit (system_colors / system_typography).
- *   - AstNode         -> ElementorElement (container / widget).
- *   - globalRefs      -> `__globals__` (globals/colors?id=... , globals/typography?id=...).
- *   - Widgets no cubiertos / html_widget -> widget "html" (fallback seguro).
- *
- * ⚠️ Los mapeos exactos de settings por widget son PROVISIONALES hasta validar
- * contra fixtures reales de Elementor.
+ * Traduce el AST validado al esquema propietario de Elementor. Mapeos AFINADOS
+ * contra fixtures reales (fixtures/pages/*.json):
+ *   - heading  -> {title, header_size} + __globals__.title_color
+ *   - text     -> text-editor {editor}  + __globals__.text_color
+ *   - button   -> {text, link}          + __globals__.button_text_color
+ *   - image    -> {image:{url,id,alt,source,size}, image_size}
+ *   - container-> {} (+ __globals__.background_color)
+ *   - loop_grid/repeater CONFIRMADOS -> widget loop-grid {template_id, columns}
+ *     (los candidatos heurísticos se compilan como container estático)
+ *   - dynamicMapping -> __dynamic__ (formato [elementor-tag ...])
+ *   - resto / html_widget -> widget "html" (fallback seguro)
  * =============================================================================
  */
 
@@ -30,7 +33,6 @@ import {
   type ElementorSettings,
 } from "./elementor-types";
 
-const ELEMENTOR_VERSION = "3.25.0";
 const SCHEMA_VERSION = "0.4";
 
 export interface CompileOptions {
@@ -42,20 +44,27 @@ function defaultElId(): () => string {
   return () => Math.random().toString(16).slice(2, 9).padEnd(7, "0");
 }
 
+/** Mapa: UUID interno del global -> id corto de Elementor. */
+export type GlobalIdMap = Map<string, string>;
+
+interface CompileCtx {
+  idMap: GlobalIdMap;
+  elId: () => string;
+  /** nodeId de un loop confirmado -> datos del widget loop-grid. */
+  loopTemplates: Map<string, { templateId: string; columns: string }>;
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Kit (globales)                                                            */
 /* -------------------------------------------------------------------------- */
 
-/** Mapa: UUID interno del global -> id corto de Elementor. */
-export type GlobalIdMap = Map<string, string>;
-
-function parseCssSize(value: string | undefined): { unit: string; size: number } | undefined {
+function parseCssSize(value: string | undefined): { unit: string; size: number; sizes: number[] } | undefined {
   if (!value) return undefined;
   const m = value.trim().match(/^(-?[\d.]+)\s*(px|em|rem|%|vw|vh|pt)?$/);
   if (!m || m[1] === undefined) return undefined;
   const size = Number.parseFloat(m[1]);
   if (Number.isNaN(size)) return undefined;
-  return { unit: m[2] ?? "px", size };
+  return { unit: m[2] ?? "px", size, sizes: [] };
 }
 
 function compileColor(color: GlobalColor, shortId: string) {
@@ -79,8 +88,7 @@ function compileTypography(typo: GlobalTypography, shortId: string) {
 }
 
 /**
- * Compila el GlobalSystemAst a un Kit de Elementor y devuelve, además, el mapa
- * UUID->idCorto para poder referenciar los globales desde los widgets.
+ * Compila el GlobalSystemAst a un Kit de Elementor + mapa UUID->idCorto.
  */
 export function compileKit(
   gs: GlobalSystemAst,
@@ -115,7 +123,6 @@ export function compileKit(
 
 const HEADER_SIZES = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
 
-/** Reconstruye HTML simple para el fallback `html`. */
 function reconstructHtml(node: AstNode): string {
   if (node.rawHtml) return node.rawHtml;
   if (node.nodeType === "text") return node.content ?? "";
@@ -123,12 +130,11 @@ function reconstructHtml(node: AstNode): string {
   const attrs = Object.entries(node.attributes)
     .map(([k, v]) => ` ${k}="${v}"`)
     .join("");
-  const inner =
-    node.content ?? node.children.map(reconstructHtml).join("");
+  const inner = node.content ?? node.children.map(reconstructHtml).join("");
   return `<${node.tagName}${cls}${attrs}>${inner}</${node.tagName}>`;
 }
 
-/** Aplica referencias globales de color/tipografía al objeto settings. */
+/** Aplica referencias globales de color/tipografía a settings (`__globals__`). */
 function applyGlobals(
   node: AstNode,
   settings: ElementorSettings,
@@ -149,83 +155,134 @@ function applyGlobals(
   }
 }
 
-function widget(
-  id: string,
-  widgetType: string,
+/** Aplica dynamicMapping como `__dynamic__` (formato [elementor-tag ...]). */
+function applyDynamic(
+  node: AstNode,
   settings: ElementorSettings,
-): ElementorElement {
+  binding: string,
+  settingKey: string,
+): void {
+  const dm = node.dynamicMapping?.[binding];
+  if (!dm) return;
+  const token = dm.token ?? `[elementor-tag name="${dm.tag}"]`;
+  const dyn = ((settings as Record<string, unknown>).__dynamic__ ??= {}) as Record<string, string>;
+  dyn[settingKey] = token;
+}
+
+function widget(id: string, widgetType: string, settings: ElementorSettings): ElementorElement {
   return { id, elType: "widget", widgetType, settings, elements: [] };
 }
 
-/** Compila un AstNode a un ElementorElement (o null si se omite). */
-function compileNode(node: AstNode, idMap: GlobalIdMap, elId: () => string): ElementorElement | null {
-  if (node.nodeType === "text") return null; // el texto se absorbe en el padre
-  const id = elId();
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
+function compileNode(node: AstNode, ctx: CompileCtx): ElementorElement | null {
+  if (node.nodeType === "text") return null;
+  const id = ctx.elId();
 
   switch (node.elementorRole) {
     case "heading": {
       const settings: ElementorSettings = { title: node.content ?? "" };
       if (HEADER_SIZES.has(node.tagName)) settings.header_size = node.tagName;
-      applyGlobals(node, settings, "title_color", idMap);
+      applyGlobals(node, settings, "title_color", ctx.idMap);
+      applyDynamic(node, settings, "content", "title");
       return widget(id, "heading", settings);
     }
     case "text": {
       const settings: ElementorSettings = { editor: `<p>${node.content ?? ""}</p>` };
-      applyGlobals(node, settings, "text_color", idMap);
+      applyGlobals(node, settings, "text_color", ctx.idMap);
+      applyDynamic(node, settings, "content", "editor");
       return widget(id, "text-editor", settings);
     }
     case "button": {
       const settings: ElementorSettings = {
         text: node.content ?? "",
-        link: { url: node.attributes.href ?? "#", is_external: "", nofollow: "" },
+        link: { url: node.attributes.href ?? "#", is_external: "", nofollow: "", custom_attributes: "" },
       };
-      applyGlobals(node, settings, "button_text_color", idMap);
+      applyGlobals(node, settings, "button_text_color", ctx.idMap);
+      applyDynamic(node, settings, "content", "text");
       return widget(id, "button", settings);
     }
     case "link": {
       const settings: ElementorSettings = {
         editor: `<a href="${node.attributes.href ?? "#"}">${node.content ?? ""}</a>`,
       };
-      applyGlobals(node, settings, "text_color", idMap);
+      applyGlobals(node, settings, "text_color", ctx.idMap);
       return widget(id, "text-editor", settings);
     }
     case "image": {
       const settings: ElementorSettings = {
-        image: { url: node.attributes.src ?? "", alt: node.attributes.alt ?? "" },
+        image: {
+          url: node.attributes.src ?? "",
+          id: "",
+          alt: node.attributes.alt ?? "",
+          source: "library",
+          size: "",
+        },
+        image_size: "full",
       };
+      applyDynamic(node, settings, "src", "image");
       return widget(id, "image", settings);
     }
     case "divider":
       return widget(id, "divider", {});
     case "spacer":
       return widget(id, "spacer", {});
+
+    case "loop_grid":
+    case "repeater": {
+      const info = ctx.loopTemplates.get(node.id);
+      if (info) {
+        return widget(id, "loop-grid", {
+          _skin: "post",
+          template_id: info.templateId,
+          columns: info.columns,
+          posts_per_page: 6,
+        });
+      }
+      // Sin plantilla resuelta -> se comporta como container estático.
+      return compileContainer(node, id, ctx);
+    }
+
     case "container":
     case "loop_candidate":
     case "repeater_candidate":
-    case "loop_grid":
-    case "repeater":
-    case "loop_item_template": {
-      const settings: ElementorSettings = {};
-      applyGlobals(node, settings, "background_color", idMap);
-      // PROVISIONAL: loop/repeater se compila como container; el mapeo real del
-      // widget Loop Grid requiere fixture. Marcamos el origen para el exporter.
-      if (node.elementorRole !== "container" && node.elementorRole !== "loop_item_template") {
-        (settings as Record<string, unknown>)._ast_pattern = node.elementorRole;
-      }
-      const elements = node.children
-        .map((c) => compileNode(c, idMap, elId))
-        .filter((e): e is ElementorElement => e !== null);
-      return { id, elType: "container", settings, elements, isInner: false };
-    }
-    // Fallback seguro: html_widget, list, icon, video, form, input, unknown...
+    case "loop_item_template":
+      return compileContainer(node, id, ctx);
+
+    // Fallback seguro: list, icon, icon_box, video, form, input, html_widget, unknown...
     default:
       return widget(id, "html", { html: reconstructHtml(node) });
   }
 }
 
+function compileContainer(node: AstNode, id: string, ctx: CompileCtx): ElementorElement {
+  const settings: ElementorSettings = {};
+  applyGlobals(node, settings, "background_color", ctx.idMap);
+  const elements = node.children
+    .map((c) => compileNode(c, ctx))
+    .filter((e): e is ElementorElement => e !== null);
+  return { id, elType: "container", settings, elements, isInner: false };
+}
+
 /* -------------------------------------------------------------------------- */
-/*  Documento de página                                                       */
+/*  Documentos                                                                */
 /* -------------------------------------------------------------------------- */
+
+function compileDocument(root: AstNode, title: string, type: string, ctx: CompileCtx): ElementorDocument {
+  const compiledRoot = compileNode(root, ctx);
+  // El contenido de nivel superior son los hijos del <body> (o el propio nodo).
+  const content =
+    compiledRoot?.elType === "container" ? compiledRoot.elements : compiledRoot ? [compiledRoot] : [];
+  return ElementorDocumentSchema.parse({
+    version: SCHEMA_VERSION,
+    title,
+    type,
+    content,
+    page_settings: [],
+  });
+}
 
 /** Compila el AstNode raíz de una página a un ElementorDocument. */
 export function compilePageDocument(
@@ -235,50 +292,23 @@ export function compilePageDocument(
   opts: CompileOptions = {},
 ): ElementorDocument {
   const elId = opts.elIdFactory ?? defaultElId();
-  const compiledRoot = compileNode(root, idMap, elId);
-  // El contenido de nivel superior son los hijos del <body> (o el propio nodo).
-  const content =
-    compiledRoot?.elType === "container" ? compiledRoot.elements : compiledRoot ? [compiledRoot] : [];
-  return ElementorDocumentSchema.parse({
-    version: SCHEMA_VERSION,
-    title,
-    type: "page",
-    content,
-    page_settings: {},
-  });
+  return compileDocument(root, title, "page", { idMap, elId, loopTemplates: new Map() });
 }
 
-/** Compila un único nodo-plantilla (hijo de un loop) como documento aparte. */
-function compileTemplateDocument(
-  template: AstNode,
-  title: string,
-  type: string,
-  idMap: GlobalIdMap,
-  elId: () => string,
-): ElementorDocument {
-  const compiled = compileNode(template, idMap, elId);
-  return ElementorDocumentSchema.parse({
-    version: SCHEMA_VERSION,
-    title,
-    type,
-    content: compiled ? [compiled] : [],
-    page_settings: {},
-  });
-}
-
-/** Recorre el árbol y devuelve los nodos plantilla de cada patrón detectado. */
-function collectLoopTemplates(root: AstNode): AstNode[] {
-  const templates: AstNode[] = [];
+/** Recorre el árbol y devuelve los nodos de loop CONFIRMADO (loop_grid/repeater). */
+function collectConfirmedLoops(root: AstNode): AstNode[] {
+  const loops: AstNode[] = [];
   const visit = (node: AstNode): void => {
-    const templateId = node.patternMeta?.templateChildId;
-    if (templateId) {
-      const tpl = node.children.find((c) => c.id === templateId);
-      if (tpl) templates.push(tpl);
+    if (
+      (node.elementorRole === "loop_grid" || node.elementorRole === "repeater") &&
+      node.patternMeta?.templateChildId
+    ) {
+      loops.push(node);
     }
     for (const child of node.children) visit(child);
   };
   visit(root);
-  return templates;
+  return loops;
 }
 
 export interface CompiledDocument {
@@ -288,35 +318,42 @@ export interface CompiledDocument {
   doc: ElementorDocument;
 }
 
-/** Bundle completo listo para empaquetar en ZIP. */
 export interface CompiledBundle {
   kit: ElementorKit;
   documents: CompiledDocument[];
 }
 
-/** Compila un ProjectAst completo (kit + documentos de página + sub-templates de loops). */
+/** Compila un ProjectAst completo (kit + páginas + sub-templates de loops). */
 export function compileProject(project: ProjectAst, opts: CompileOptions = {}): CompiledBundle {
   const elId = opts.elIdFactory ?? defaultElId();
   const { kit, idMap } = compileKit(project.globalSystem, { elIdFactory: elId });
+  const ctx: CompileCtx = { idMap, elId, loopTemplates: new Map() };
 
+  const loopDocs: CompiledDocument[] = [];
+  // Pass 1: por cada loop confirmado, compila su plantilla como doc "loop-item"
+  // y registra el template_id para que el widget loop-grid lo referencie.
+  for (const page of project.pages) {
+    collectConfirmedLoops(page.root).forEach((loopNode, i) => {
+      const tpl = loopNode.children.find((c) => c.id === loopNode.patternMeta?.templateChildId);
+      if (!tpl) return;
+      const templateId = ctx.elId();
+      const columns = String(clamp(loopNode.patternMeta?.repeatedCount ?? 3, 1, 6));
+      ctx.loopTemplates.set(loopNode.id, { templateId, columns });
+      const name = `${page.name}-loop-item-${i + 1}`;
+      loopDocs.push({ name, title: name, type: "loop-item", doc: compileDocument(tpl, name, "loop-item", ctx) });
+    });
+  }
+
+  // Pass 2: compila las páginas (los loop-grid ya resuelven su template_id).
   const documents: CompiledDocument[] = [];
   for (const page of project.pages) {
     documents.push({
       name: page.name,
       title: page.name,
       type: "page",
-      doc: compilePageDocument(page.root, page.name, idMap, { elIdFactory: elId }),
-    });
-    // Sub-templates de loops/repeaters (uno por patrón detectado).
-    collectLoopTemplates(page.root).forEach((tpl, i) => {
-      const name = `${page.name}-loop-item-${i + 1}`;
-      documents.push({
-        name,
-        title: name,
-        type: "loop-item",
-        doc: compileTemplateDocument(tpl, name, "loop-item", idMap, elId),
-      });
+      doc: compileDocument(page.root, page.name, "page", ctx),
     });
   }
+  documents.push(...loopDocs);
   return { kit, documents };
 }

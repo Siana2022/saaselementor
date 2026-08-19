@@ -37,12 +37,13 @@ Pendiente: afinar mapeos exactos de Elementor con **fixtures reales** del usuari
 
 ---
 
-## Pendiente (requiere validación / fixtures del usuario)
-- [ ] **Fixtures reales de Elementor** (kit + widgets) → afinar claves exactas
-      de `settings` por widget y estructura de `manifest.json` / `kit.json`.
-- [ ] `scripts/analyze-fixture.ts` para derivar schemas desde los fixtures.
-- [ ] Loop Grid / Repeater: mapeo real del widget (hoy es container provisional).
-- [ ] Tipografía global en widgets vía `__globals__` (validar claves).
-- [ ] Ingesta de ZIP (HTML + assets + `<link>` CSS externos).
-- [ ] Tests de integración de las rutas API; auth / multi-proyecto.
+## Pendiente
+- [x] Fixtures reales de página + `scripts/analyze-fixture.ts` (6 exports validados).
+- [x] Compiler afinado con fixtures (heading/text/button/image/globals/__dynamic__).
+- [x] Loop dinámico: loop-grid + loop-item con template_id (rol confirmado).
+- [ ] **Export real de un Kit** (site-settings) → clavar `kit.json` + _id de globales.
+- [ ] **Template Kit .zip con manifest.json** → formato real del manifest.
+- [ ] Mapear más widgets nativos (icon-box, nav-menu, form, posts, video, social-icons).
+- [ ] Ingesta de ZIP (HTML + assets + <link> CSS externos).
+- [ ] Tests de integración de rutas API; auth / multi-proyecto.
 - [ ] `ANTHROPIC_API_KEY` en `.env.local` para el chat IA.

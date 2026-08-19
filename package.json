@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "analyze:fixtures": "node scripts/analyze-fixture.ts"
   },
   "engines": {
     "node": ">=20"
