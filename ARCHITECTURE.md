@@ -141,3 +141,27 @@ Zustand y lo que consume el compilador. Incluye `schemaVersion` para migraciones
   salida se valida contra `GlobalSystemAstSchema`. Reordenado el plan: los
   fixtures/schemas de Elementor se posponen a la fase del Compiler (Pilar 5),
   que sí requiere JSON reales. **Pendiente: validación del extractor.**
+
+## 10. Estado del MVP (2026-08-19)
+
+Pipeline end-to-end funcionando: Ingesta → AST (Two-Pass) → Visualizador iframe →
+Chat IA (mutaciones) → Export ZIP. Módulos:
+
+```
+lib/core/ast/types.ts        Modelo de datos (AST)                [Pilar base]
+lib/parser/global-system.ts  CSS -> GlobalSystemAst               [Pilar 1]
+lib/parser/html-to-ast.ts    HTML -> AST + pattern matching       [Pilar 2]
+lib/render/ast-to-html.ts    AST -> srcdoc iframe                 [Pilar 3]
+lib/store/project-store.ts   Estado global (Zustand)              [Pilar 3]
+lib/core/mutations.ts        JSON Patch IA + aplicación inmutable [Pilar 4]
+lib/compiler/*               AST -> Elementor JSON + ZIP          [Pilar 5]
+app/api/{ingest,ai,export}   Rutas server-side (Node runtime)
+app/editor + components/*    UI del SaaS (lienzo + chat + export)
+```
+
+Cobertura: 56 tests (Vitest). `tsc --noEmit` y `next build` en verde.
+
+**Deuda técnica consciente (por regla de fixtures):** el esquema exacto de los
+widgets de Elementor, el `manifest.json` y el `kit.json` son PROVISIONALES;
+se validarán/afinarán con JSON reales exportados. El fallback `html_widget`
+garantiza que ningún nodo rompa la importación mientras tanto.

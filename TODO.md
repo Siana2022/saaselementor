@@ -1,66 +1,48 @@
 # TODO.md — HTML → Elementor SaaS AI
 
 ## Estado actual
-**FASE: PASO 2 — Pilar 1: Global Design System Extractor.**
-⏸️ **BLOQUEADO esperando validación del usuario sobre el extractor.**
-
-> Nota de orden: los fixtures/schemas de Elementor se han movido a la fase del
-> Compiler (Pilar 5), porque solo son necesarios para la salida AST→Elementor y
-> requieren JSON reales que aportará el usuario. Las fases HTML/CSS→AST (Pilares
-> 1 y 2) no los necesitan y avanzan primero.
+**MVP end-to-end completo (Pilares 1-5 + UI).** 56 tests verdes · `tsc` · `next build` OK.
+Pendiente: afinar mapeos exactos de Elementor con **fixtures reales** del usuario.
 
 ---
 
-## PASO 1 — Andamiaje y AST  ✅ VALIDADO
-- [x] Repo git + Next.js 16 (App Router) + TS 6 strict + Tailwind v4.
-- [x] Zustand, Zod v4, Vitest (+ cheerio, jsdom, @anthropic-ai/sdk, uuid).
+## Completado
+
+### PASO 1 — Andamiaje y AST  ✅ VALIDADO
+- [x] Next.js 16 + TS strict + Tailwind v4 + Zustand/Zod/Vitest.
 - [x] `lib/core/ast/types.ts` (AstNode + GlobalSystemAst + ProjectAst).
-- [x] Tests de humo (8) + `ARCHITECTURE.md` + `TODO.md`.
-- [x] **Validado por el usuario.**
 
-## PASO 2 — Pilar 1: Global Design System Extractor  ✅ (a la espera de validación)
-- [x] `lib/parser/global-system.ts`: `extractGlobalSystem(css)` → `GlobalSystemAst`.
-  - [x] Variables `:root` → `rootVariables` (+ `GlobalColor` si son color).
-  - [x] Derivación de nombres de color desde la custom property.
-  - [x] Tipografías desde h1-h6 / body / p (cascada last-wins, ignora @media).
-  - [x] `meta.fontFamilies` (familias únicas).
-  - [x] Tolerancia a CSS roto (nota en `meta.notes`, sin excepción).
-  - [x] `collectStyleCss(html)` para reunir el CSS de los `<style>`.
-- [x] Tests (11) verdes; `tsc` + salida validada contra Zod.
-- [ ] ⏳ **VALIDACIÓN DEL USUARIO.**
+### PASO 2 — Pilar 1: Global Design System Extractor  ✅ VALIDADO
+- [x] `lib/parser/global-system.ts` (CSS → GlobalSystemAst, colores/tipografías).
+
+### PASO 3 — Pilar 2: HTML → AST + Pattern Matching  ✅
+- [x] `lib/parser/html-to-ast.ts` (roles, atributos, patrones, html_widget,
+      globalRefs, `buildProjectAst` Two-Pass).
+
+### PASO 4 — Pilar 4: Motor de mutaciones  ✅
+- [x] `lib/core/mutations.ts` (MutationSchema + applyMutations inmutable).
+- [x] `app/api/ai/route.ts` (Claude → JSON Patch validado con Zod).
+
+### PASO 5 — Pilar 5: Compiler & Exporter  ✅ (PROVISIONAL sin fixtures)
+- [x] `lib/compiler/elementor-types.ts` (schemas Zod del esquema Elementor).
+- [x] `lib/compiler/compile.ts` (Kit + widgets + __globals__ + sub-templates loop).
+- [x] `lib/compiler/export-zip.ts` (manifest.json + kit.json + templates/).
+- [x] `app/api/export/route.ts` (descarga ZIP).
+
+### PASO 6 — Pilar 3: Visualizador + UI  ✅
+- [x] `lib/store/project-store.ts` (Zustand).
+- [x] `lib/render/ast-to-html.ts` (srcdoc iframe + selección por postMessage).
+- [x] `app/api/ingest/route.ts`.
+- [x] `components/` (Ingest, Canvas, Chat, Inspector, Export) + `app/editor`.
 
 ---
 
-## Próximas fases (no iniciar hasta validar el PASO 2)
-
-### PASO 3 — Pilar 2: Ingesta de páginas + Pattern Matching
-- [ ] `lib/parser/html-to-ast.ts` HTML → AST base (cheerio/jsdom).
-- [ ] Inferencia de `elementorRole` por etiqueta/heurística.
-- [ ] Enlace de `globalRefs` contra el `GlobalSystemAst` (Fase 1).
-- [ ] Pattern matching (≥3 hijos idénticos → loop/repeater candidate + plantilla).
-- [ ] Fallback `html_widget` (+ `rawHtml`) para estructuras indescifrables.
-- [ ] Tests: fixtures HTML → AST esperado.
-
-### PASO 4 — Pilar 3: Visualizador en tiempo real
-- [ ] Store Zustand del `ProjectAst`.
-- [ ] Render del AST en `<iframe sandbox>`.
-- [ ] Selección de elementos → envía `id` al panel de chat.
-
-### PASO 5 — Pilar 4: AI Chat Controller
-- [ ] Schema Zod de mutaciones (JSON Patch: updateRole, updateStyle, ...).
-- [ ] Route Claude API (prompt + fragmento AST + id).
-- [ ] Aplicar mutaciones validadas → Zustand → repintado.
-- [ ] Tests: mutación → AST resultante.
-
-### PASO 6 — Fixtures + Pilar 5: Compiler & Exporter
-- [ ] **(Requiere fixtures del usuario)** `fixtures/` con kit + widgets reales.
-- [ ] `scripts/analyze-fixture.ts` → derivar schemas Zod de Elementor.
-- [ ] AST → JSON de Elementor (widgets apuntan a globals del Kit).
-- [ ] `GlobalSystemAst` → `elementor-kit.json`.
-- [ ] Empaquetado ZIP: `manifest.json` + `kit.json` + `/templates/` (+ loops).
-- [ ] Tests: AST → JSON Elementor exacto (contra fixtures).
-
-### Transversal
-- [ ] Ingesta de ZIP (subida HTML/CSS + `<link>` externos).
-- [ ] UI del SaaS (lienzo + chat).
-- [ ] Autenticación / multi-proyecto (si aplica).
+## Pendiente (requiere validación / fixtures del usuario)
+- [ ] **Fixtures reales de Elementor** (kit + widgets) → afinar claves exactas
+      de `settings` por widget y estructura de `manifest.json` / `kit.json`.
+- [ ] `scripts/analyze-fixture.ts` para derivar schemas desde los fixtures.
+- [ ] Loop Grid / Repeater: mapeo real del widget (hoy es container provisional).
+- [ ] Tipografía global en widgets vía `__globals__` (validar claves).
+- [ ] Ingesta de ZIP (HTML + assets + `<link>` CSS externos).
+- [ ] Tests de integración de las rutas API; auth / multi-proyecto.
+- [ ] `ANTHROPIC_API_KEY` en `.env.local` para el chat IA.
