@@ -4,6 +4,7 @@ import { CanvasIframe } from "@/components/CanvasIframe";
 import { ChatPanel } from "@/components/ChatPanel";
 import { NodeInspector } from "@/components/NodeInspector";
 import { ExportButton } from "@/components/ExportButton";
+import { AiCompileButton } from "@/components/AiCompileButton";
 import { PreflightPanel } from "@/components/PreflightPanel";
 
 export default function EditorPage() {
@@ -11,7 +12,10 @@ export default function EditorPage() {
     <main className="flex h-screen flex-col bg-neutral-950 text-neutral-100">
       <header className="flex items-center justify-between border-b border-neutral-800 px-4 py-2">
         <h1 className="text-sm font-semibold">HTML → Elementor · Editor</h1>
-        <ExportButton />
+        <div className="flex items-center gap-3">
+          <AiCompileButton />
+          <ExportButton />
+        </div>
       </header>
       <div className="grid flex-1 grid-cols-[1fr_380px] gap-3 overflow-hidden p-3">
         <section className="min-h-0 overflow-hidden">

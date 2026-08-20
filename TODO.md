@@ -51,6 +51,12 @@ Pendiente: afinar mapeos exactos de Elementor con **fixtures reales** del usuari
 ## Export standalone
 - [x] exportTemplatesZip: plantillas individuales (formato standalone, estilos inline) importables por Plantillas -> Importar. Opción inlineStyles en el compilador.
 
+## Compilador con IA (pivote)
+- [x] lib/compiler/ai-compile.ts: prompt-receta + compactAst + parseo/validación Zod.
+- [x] /api/ai-compile: Claude reconstruye la página (type container), reintento con error.
+- [x] AiCompileButton: compilar página actual / todas (ZIP). Estilos inline, import por Plantillas.
+- [ ] Afinar prompt con feedback del import real; imágenes por Media Library; globales.
+
 ## Pendiente
 - [x] Fixtures reales (páginas + Website Kit) + `scripts/analyze-fixture.ts`.
 - [x] Kit real: `site-settings.json` (system/custom colors + typography).
