@@ -33,6 +33,7 @@ import {
 import { collectStyleCss, extractGlobalSystem } from "./global-system";
 import { computeStyles } from "./css-resolver";
 import { deriveGlobalsFromUsage, linkGlobalRefs as linkGlobalRefsUsage } from "./global-usage";
+import { optimizeTree } from "./optimize";
 
 export interface HtmlParseOptions {
   idFactory?: () => string;
@@ -88,6 +89,30 @@ const CONTAINER_TAGS = new Set([
   "figure",
   "ul",
   "ol",
+]);
+
+/** Etiquetas inline: forman parte del contenido de texto, no widgets aparte. */
+const INLINE_TAGS = new Set([
+  "span",
+  "strong",
+  "em",
+  "b",
+  "i",
+  "small",
+  "br",
+  "sub",
+  "sup",
+  "mark",
+  "u",
+  "code",
+  "s",
+  "abbr",
+  "time",
+  "cite",
+  "q",
+  "a",
+  "label",
+  "wbr",
 ]);
 
 /** Convierte un atributo `style` inline en un StyleMap. */
@@ -254,10 +279,43 @@ function buildElementNode(
     });
   }
 
-  const children: AstNode[] = [];
-  let combinedText = "";
   const elementChildren = el.children.filter(isTag);
   const hasElementChildren = elementChildren.length > 0;
+  const inlineOnly = elementChildren.every((c) => INLINE_TAGS.has(c.name.toLowerCase()));
+  const innerText = collapseWhitespace($(el).text());
+  const innerHtml = ($(el).html() ?? "").trim();
+
+  /** Crea un nodo hoja (sin descender en hijos). */
+  const leaf = (role: ElementorRole, content: string): AstNode =>
+    AstNodeSchema.parse({
+      id: opts.idFactory(),
+      nodeType: "element",
+      tagName,
+      classes,
+      attributes: attribs,
+      styles,
+      elementorRole: role,
+      content: content || undefined,
+      globalRefs: linkGlobalRefs(styles, opts.globalSystem),
+    });
+
+  const clsl = classes.join(" ").toLowerCase();
+
+  // Bloques de texto: el HTML inline (span/strong/br...) forma parte del contenido.
+  if (/^h[1-6]$/.test(tagName)) return leaf("heading", innerHtml || innerText);
+  if (tagName === "p" || tagName === "blockquote" || tagName === "figcaption")
+    return leaf("text", innerHtml || innerText);
+  if (tagName === "a" && inlineOnly)
+    return leaf(/\b(btn|button|cta)\b/.test(clsl) ? "button" : "link", innerText);
+  if (tagName === "button" && inlineOnly) return leaf("button", innerText);
+  // Etiquetas de texto inline sueltas (span/small/label/li/cite...) con solo inline.
+  if (TEXT_TAGS.has(tagName) && inlineOnly && tagName !== "li")
+    return leaf("text", innerHtml || innerText);
+  // Cualquier elemento que solo contiene texto (sin hijos-elemento) -> texto.
+  if (!hasElementChildren && innerText) return leaf("text", innerHtml || innerText);
+
+  const children: AstNode[] = [];
+  let combinedText = "";
 
   for (const child of el.children as ChildNode[]) {
     if (isText(child)) {
@@ -364,10 +422,10 @@ export function buildProjectAstFromPages(
 ): ProjectAst {
   const idFactory = options.idFactory ?? uuidv4;
 
-  // 1) Parsea cada página (estilos computados; sin enlazar globales todavía).
+  // 1) Parsea cada página (estilos computados) y OPTIMIZA el árbol (poda/colapso).
   const parsed = pages.map((p) => {
     const css = collectStyleCss(p.html);
-    const root = htmlToAst(p.html, { ...options, idFactory, css, globalSystem: undefined });
+    const root = optimizeTree(htmlToAst(p.html, { ...options, idFactory, css, globalSystem: undefined }));
     return { ...p, root };
   });
 
