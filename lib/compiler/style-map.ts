@@ -25,14 +25,31 @@ export function firstFamily(value: string | undefined): string | undefined {
   return clean || undefined;
 }
 
-/** Parsea una longitud CSS a {unit,size,sizes}. `defaultUnit` para unitless. */
+/**
+ * Parsea una longitud CSS a {unit,size,sizes}. Tolera valores complejos
+ * (`clamp()`, `calc()`, min/max): extrae la mayor longitud px-equivalente
+ * (rem/em ≈ 16px), útil para el tamaño de escritorio de tipografías fluidas.
+ * `defaultUnit` se usa para valores sin unidad (p. ej. line-height).
+ */
 export function parseLen(value: string | undefined, defaultUnit = "px"): Len | undefined {
   if (!value) return undefined;
-  const m = value.trim().match(/^(-?[\d.]+)(px|em|rem|%|vw|vh|pt)?$/);
-  if (!m || m[1] === undefined) return undefined;
-  const size = Number.parseFloat(m[1]);
-  if (Number.isNaN(size)) return undefined;
-  return { unit: m[2] ?? defaultUnit, size, sizes: [] };
+  const v = value.trim();
+  const simple = v.match(/^(-?[\d.]+)(px|em|rem|%|vw|vh|pt)?$/);
+  if (simple && simple[1] !== undefined) {
+    const size = Number.parseFloat(simple[1]);
+    if (!Number.isNaN(size)) return { unit: simple[2] ?? defaultUnit, size, sizes: [] };
+  }
+  // Valor complejo (clamp/calc/…): toma la mayor longitud absoluta en px.
+  const tokens = [...v.matchAll(/(-?[\d.]+)(px|rem|em)/g)];
+  let best = -Infinity;
+  for (const t of tokens) {
+    const n = Number.parseFloat(t[1]!);
+    if (Number.isNaN(n)) continue;
+    const px = t[2] === "px" ? n : n * 16;
+    if (px > best) best = px;
+  }
+  if (best > -Infinity) return { unit: "px", size: Math.round(best * 100) / 100, sizes: [] };
+  return undefined;
 }
 
 interface Dimension {
@@ -107,6 +124,27 @@ export function backgroundSettings(styles: StyleMap): ElementorSettings {
   const color = backgroundColor(styles);
   if (!color) return {};
   return { background_background: "classic", background_color: color };
+}
+
+/** URL de imagen de fondo desde `background-image` o el shorthand `background`. */
+function backgroundImageUrl(styles: StyleMap): string | undefined {
+  const src = styles["background-image"] ?? styles["background"];
+  if (!src) return undefined;
+  const m = src.match(/url\(\s*['"]?([^'")]+)['"]?\s*\)/i);
+  return m?.[1];
+}
+
+/** Ajustes de imagen de fondo "classic" (containers con background-image). */
+export function backgroundImageSettings(styles: StyleMap): ElementorSettings {
+  const url = backgroundImageUrl(styles);
+  if (!url) return {};
+  return {
+    background_background: "classic",
+    background_image: { url, id: "", alt: "", source: "url", size: "" },
+    background_position: styles["background-position"] ?? "center center",
+    background_repeat: styles["background-repeat"] ?? "no-repeat",
+    background_size: styles["background-size"] ?? "cover",
+  };
 }
 
 /** Espaciado (padding/margin) con prefijo "" (container) o "_" (widget). */

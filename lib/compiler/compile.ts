@@ -36,8 +36,10 @@ import {
   typographySettings,
   spacingSettings,
   backgroundSettings,
+  backgroundImageSettings,
   borderRadiusSetting,
   flexSettings,
+  parseLen,
 } from "./style-map";
 
 const SCHEMA_VERSION = "0.4";
@@ -65,15 +67,6 @@ interface CompileCtx {
 /*  Kit (globales)                                                            */
 /* -------------------------------------------------------------------------- */
 
-function parseCssSize(value: string | undefined): { unit: string; size: number; sizes: number[] } | undefined {
-  if (!value) return undefined;
-  const m = value.trim().match(/^(-?[\d.]+)\s*(px|em|rem|%|vw|vh|pt)?$/);
-  if (!m || m[1] === undefined) return undefined;
-  const size = Number.parseFloat(m[1]);
-  if (Number.isNaN(size)) return undefined;
-  return { unit: m[2] ?? "px", size, sizes: [] };
-}
-
 function compileColor(color: GlobalColor, shortId: string) {
   return { _id: shortId, title: color.name, color: color.value };
 }
@@ -86,10 +79,10 @@ function compileTypography(typo: GlobalTypography, shortId: string) {
     typography_typography: "custom" as const,
     ...(family ? { typography_font_family: family } : {}),
     ...(typo.fontWeight ? { typography_font_weight: typo.fontWeight } : {}),
-    ...(parseCssSize(typo.fontSize) ? { typography_font_size: parseCssSize(typo.fontSize) } : {}),
-    ...(parseCssSize(typo.lineHeight) ? { typography_line_height: parseCssSize(typo.lineHeight) } : {}),
-    ...(parseCssSize(typo.letterSpacing)
-      ? { typography_letter_spacing: parseCssSize(typo.letterSpacing) }
+    ...(parseLen(typo.fontSize) ? { typography_font_size: parseLen(typo.fontSize) } : {}),
+    ...(parseLen(typo.lineHeight, "em") ? { typography_line_height: parseLen(typo.lineHeight, "em") } : {}),
+    ...(parseLen(typo.letterSpacing)
+      ? { typography_letter_spacing: parseLen(typo.letterSpacing) }
       : {}),
     ...(typo.textTransform && typo.textTransform !== "none"
       ? { typography_text_transform: typo.textTransform }
@@ -316,7 +309,7 @@ function compileContainer(node: AstNode, id: string, ctx: CompileCtx): Elementor
     ...spacingSettings(node.styles, ""),
     ...borderRadiusSetting(node.styles, "border_radius"),
   };
-  // Fondo: referencia global (globalRefs.backgroundColor) si existe; si no, literal.
+  // Fondo color: referencia global (globalRefs.backgroundColor) si existe; si no, literal.
   const bgId = node.globalRefs?.backgroundColor;
   if (bgId && ctx.idMap.has(bgId)) {
     settings.background_background = "classic";
@@ -324,6 +317,8 @@ function compileContainer(node: AstNode, id: string, ctx: CompileCtx): Elementor
   } else {
     Object.assign(settings, backgroundSettings(node.styles));
   }
+  // Fondo imagen (hero, tarjetas con imagen de fondo, etc.).
+  Object.assign(settings, backgroundImageSettings(node.styles));
   const elements = node.children
     .map((c) => compileNode(c, ctx))
     .filter((e): e is ElementorElement => e !== null);

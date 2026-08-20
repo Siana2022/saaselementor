@@ -89,3 +89,40 @@ describe("transferencia de estilos end-to-end (CSS de clases -> settings)", () =
     expect(typos.some((t) => t.typography_font_family === "Montserrat")).toBe(true);
   });
 });
+
+import { backgroundImageSettings } from "../style-map";
+
+describe("mejoras de fidelidad: clamp() e imágenes de fondo", () => {
+  it("parseLen tolera clamp()/rem (toma la mayor px-equivalente)", () => {
+    expect(parseLen("clamp(2rem, 5vw, 4rem)")).toEqual({ unit: "px", size: 64, sizes: [] });
+    expect(parseLen("1.5rem")).toEqual({ unit: "rem", size: 1.5, sizes: [] });
+    expect(parseLen("calc(100% - 20px)")).toEqual({ unit: "px", size: 20, sizes: [] });
+  });
+
+  it("backgroundImageSettings extrae url() y pone classic + cover", () => {
+    const s = backgroundImageSettings({ "background-image": "url('data:image/png;base64,AAA')" });
+    expect(s.background_background).toBe("classic");
+    expect((s.background_image as { url: string }).url).toBe("data:image/png;base64,AAA");
+    expect(s.background_size).toBe("cover");
+  });
+
+  it("un container con background-image exporta background_image", () => {
+    const html = `<html><head><style>
+      .hero{ background-image:url('https://x.com/hero.jpg'); background-size:cover }
+      .hero h1{ font-size:clamp(2rem,5vw,3.5rem); color:#fff }
+    </style></head><body><section class="hero"><h1>T</h1></section></body></html>`;
+    const project = buildProjectAst(html, { name: "home" }, { idFactory: seededIds() });
+    const bundle = compileProject(project, { elIdFactory: () => Math.random().toString(36).slice(2, 9) });
+
+    let heroBg: ElementorElement | undefined;
+    walk(bundle.documents[0]!.doc.content, (e) => {
+      if (e.settings.background_image) heroBg = e;
+    });
+    expect(heroBg).toBeDefined();
+    expect((heroBg!.settings.background_image as { url: string }).url).toBe("https://x.com/hero.jpg");
+
+    // El título fluido (clamp) ahora tiene tamaño en el Kit
+    const typos = bundle.siteSettings.settings.system_typography.concat(bundle.siteSettings.settings.custom_typography);
+    expect(typos.some((t) => t.typography_font_size && t.typography_font_size.size === 56)).toBe(true);
+  });
+});
