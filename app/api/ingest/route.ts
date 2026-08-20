@@ -33,7 +33,8 @@ export async function POST(req: Request) {
       );
       // CSS de la primera página para el preview del lienzo.
       const css = pages[0] ? collectStyleCss(pages[0].html) : "";
-      return NextResponse.json({ project, css, pageCount: pages.length });
+      const pagesHtml = pages.map((p) => ({ name: p.name, html: p.html }));
+      return NextResponse.json({ project, css, pageCount: pages.length, pages: pagesHtml });
     }
 
     // --- Ingesta de HTML pegado ---
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
     }
     const project = buildProjectAst(html, { name });
     const css = collectStyleCss(html);
-    return NextResponse.json({ project, css });
+    return NextResponse.json({ project, css, pageCount: 1, pages: [{ name, html }] });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

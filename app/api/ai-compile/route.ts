@@ -1,15 +1,11 @@
 /**
- * POST /api/ai-compile — { page: PageAst, title } -> { doc } (Elementor container)
- * Claude reconstruye la página como plantilla Elementor limpia (guiado por la
- * receta), validada con Zod. Reintenta una vez con el error de validación.
+ * POST /api/ai-compile — { html, title } -> { doc } (Elementor container)
+ * El SaaS ejecuta la "skill": Claude reconstruye la página (HTML+CSS real) como
+ * plantilla Elementor limpia, validada con Zod. Streaming para evitar timeouts.
  */
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import {
-  AI_SYSTEM_PROMPT,
-  buildAiUserMessage,
-  parseAiDocument,
-} from "@/lib/compiler/ai-compile";
+import { AI_SYSTEM_PROMPT, buildAiUserMessage, parseAiDocument } from "@/lib/compiler/ai-compile";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -22,38 +18,37 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Falta ANTHROPIC_API_KEY en el entorno." }, { status: 503 });
     }
     const body = await req.json();
-    const compact = body?.compact;
-    if (!compact || typeof compact !== "object") {
-      return NextResponse.json({ error: "Falta el AST compacto (compact)." }, { status: 400 });
-    }
+    const html = typeof body?.html === "string" ? body.html : "";
     const title = typeof body?.title === "string" && body.title ? body.title : "pagina";
+    if (!html.trim()) {
+      return NextResponse.json({ error: "html requerido" }, { status: 400 });
+    }
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const userMessage = buildAiUserMessage(title, compact);
+    const userMessage = buildAiUserMessage(title, html);
 
-    const call = async (extra?: string) => {
-      const message = await client.messages.create({
+    const run = async (extra?: string) => {
+      const stream = client.messages.stream({
         model: MODEL,
         max_tokens: 32000,
         system: AI_SYSTEM_PROMPT,
         messages: [{ role: "user", content: extra ? `${userMessage}\n\n${extra}` : userMessage }],
       });
-      return message.content
+      const msg = await stream.finalMessage();
+      return msg.content
         .filter((b): b is Anthropic.TextBlock => b.type === "text")
         .map((b) => b.text)
         .join("\n");
     };
 
-    let text = await call();
+    let text = await run();
     try {
       return NextResponse.json({ doc: parseAiDocument(text) });
     } catch (firstErr) {
-      // Reintento con el error de validación como pista.
-      text = await call(
+      text = await run(
         `El JSON anterior no fue válido (${(firstErr as Error).message}). Devuelve SOLO el JSON válido, sin texto.`,
       );
-      const doc = parseAiDocument(text);
-      return NextResponse.json({ doc });
+      return NextResponse.json({ doc: parseAiDocument(text) });
     }
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

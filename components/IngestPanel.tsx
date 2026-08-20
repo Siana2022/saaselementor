@@ -15,7 +15,7 @@ export function IngestPanel() {
   async function handleResponse(res: Response) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Error de ingesta");
-    setProject(ProjectAstSchema.parse(data.project), data.css ?? "");
+    setProject(ProjectAstSchema.parse(data.project), data.css ?? "", data.pages ?? []);
     return data as { pageCount?: number };
   }
 

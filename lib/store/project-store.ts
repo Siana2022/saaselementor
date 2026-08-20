@@ -22,13 +22,20 @@ export function findNodeById(root: AstNode, id: string): AstNode | null {
   return null;
 }
 
+export interface PageHtml {
+  name: string;
+  html: string;
+}
+
 export interface ProjectStore {
   project: ProjectAst | null;
   /** CSS original (para fidelidad del preview en el iframe). */
   css: string;
+  /** HTML+CSS autocontenido por página (para el compilador con IA). */
+  pagesHtml: PageHtml[];
   selectedId: string | null;
 
-  setProject: (project: ProjectAst, css?: string) => void;
+  setProject: (project: ProjectAst, css?: string, pagesHtml?: PageHtml[]) => void;
   selectNode: (id: string | null) => void;
   getSelectedNode: () => AstNode | null;
   applyPatch: (mutations: MutationList) => { appliedIds: string[]; missingIds: string[] };
@@ -38,9 +45,11 @@ export interface ProjectStore {
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   project: null,
   css: "",
+  pagesHtml: [],
   selectedId: null,
 
-  setProject: (project, css = "") => set({ project, css, selectedId: null }),
+  setProject: (project, css = "", pagesHtml = []) =>
+    set({ project, css, pagesHtml, selectedId: null }),
 
   selectNode: (id) => set({ selectedId: id }),
 
@@ -62,5 +71,5 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     return { appliedIds, missingIds };
   },
 
-  reset: () => set({ project: null, css: "", selectedId: null }),
+  reset: () => set({ project: null, css: "", pagesHtml: [], selectedId: null }),
 }));
