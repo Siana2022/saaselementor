@@ -31,6 +31,7 @@ import {
   type StyleMap,
 } from "@/lib/core/ast/types";
 import { collectStyleCss, extractGlobalSystem } from "./global-system";
+import { computeStyles } from "./css-resolver";
 
 export interface HtmlParseOptions {
   idFactory?: () => string;
@@ -38,6 +39,8 @@ export interface HtmlParseOptions {
   globalSystem?: GlobalSystemAst;
   /** Umbral de hijos idénticos para activar pattern matching (por defecto 3). */
   patternThreshold?: number;
+  /** CSS explícito para resolver estilos computados (por defecto: los <style>). */
+  css?: string;
 }
 
 /** Etiquetas que no aportan al diseño y se omiten del árbol. */
@@ -221,14 +224,15 @@ function buildElementNode(
   el: Element,
   $: cheerio.CheerioAPI,
   opts: Required<Pick<HtmlParseOptions, "idFactory" | "patternThreshold">> &
-    Pick<HtmlParseOptions, "globalSystem">,
+    Pick<HtmlParseOptions, "globalSystem"> & { computed?: Map<Element, StyleMap> },
 ): AstNode | null {
   const tagName = el.name.toLowerCase();
   if (SKIP_TAGS.has(tagName)) return null;
 
   const attribs: Record<string, string> = { ...el.attribs };
   const classes = (attribs.class ?? "").split(/\s+/).filter(Boolean);
-  const styles = parseInlineStyle(attribs.style);
+  // Estilos computados (cascada de clases) + inline por encima.
+  const styles: StyleMap = { ...(opts.computed?.get(el) ?? {}), ...parseInlineStyle(attribs.style) };
   delete attribs.class;
   delete attribs.style;
 
@@ -297,10 +301,13 @@ function buildElementNode(
 /** Parsea HTML y devuelve el AstNode raíz (por defecto, `<body>`). */
 export function htmlToAst(html: string, options: HtmlParseOptions = {}): AstNode {
   const $ = cheerio.load(html);
+  const css =
+    options.css ?? $("style").map((_, e) => $(e).text()).get().join("\n");
   const opts = {
     idFactory: options.idFactory ?? uuidv4,
     patternThreshold: options.patternThreshold ?? 3,
     globalSystem: options.globalSystem,
+    computed: css ? computeStyles($, css) : new Map<Element, StyleMap>(),
   };
   const bodyEl = $("body")[0];
   if (bodyEl && isTag(bodyEl)) {
