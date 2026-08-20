@@ -32,6 +32,13 @@ import {
   type SiteSettings,
   type ElementorSettings,
 } from "./elementor-types";
+import {
+  typographySettings,
+  spacingSettings,
+  backgroundSettings,
+  borderRadiusSetting,
+  flexSettings,
+} from "./style-map";
 
 const SCHEMA_VERSION = "0.4";
 
@@ -149,25 +156,35 @@ function reconstructHtml(node: AstNode): string {
   return `<${node.tagName}${cls}${attrs}>${inner}</${node.tagName}>`;
 }
 
-/** Aplica referencias globales de color/tipografía a settings (`__globals__`). */
-function applyGlobals(
+function mergeGlobal(settings: ElementorSettings, key: string, value: string): void {
+  const g = ((settings as Record<string, unknown>).__globals__ ??= {}) as Record<string, string>;
+  g[key] = value;
+}
+
+/** Color: referencia global si existe; si no, valor literal del CSS computado. */
+function applyColor(
   node: AstNode,
   settings: ElementorSettings,
-  colorSettingKey: string | undefined,
+  colorKey: string,
   idMap: GlobalIdMap,
 ): void {
-  const globals: Record<string, string> = {};
-  const colorId = node.globalRefs?.color;
-  if (colorSettingKey && colorId && idMap.has(colorId)) {
-    globals[colorSettingKey] = `globals/colors?id=${idMap.get(colorId)}`;
+  const gid = node.globalRefs?.color;
+  if (gid && idMap.has(gid)) {
+    mergeGlobal(settings, colorKey, `globals/colors?id=${idMap.get(gid)}`);
+    return;
   }
-  const typoId = node.globalRefs?.typography;
-  if (typoId && idMap.has(typoId)) {
-    globals["typography_typography"] = `globals/typography?id=${idMap.get(typoId)}`;
+  const c = node.styles["color"];
+  if (c) settings[colorKey] = c;
+}
+
+/** Tipografía global (si hay ref): sustituye a la tipografía inline. */
+function applyTypographyGlobal(node: AstNode, settings: ElementorSettings, idMap: GlobalIdMap): void {
+  const gid = node.globalRefs?.typography;
+  if (!gid || !idMap.has(gid)) return;
+  for (const k of Object.keys(settings)) {
+    if (k.startsWith("typography_")) delete settings[k];
   }
-  if (Object.keys(globals).length > 0) {
-    (settings as Record<string, unknown>).__globals__ = globals;
-  }
+  mergeGlobal(settings, "typography_typography", `globals/typography?id=${idMap.get(gid)}`);
 }
 
 /** Aplica dynamicMapping como `__dynamic__` (formato [elementor-tag ...]). */
@@ -198,15 +215,25 @@ function compileNode(node: AstNode, ctx: CompileCtx): ElementorElement | null {
 
   switch (node.elementorRole) {
     case "heading": {
-      const settings: ElementorSettings = { title: node.content ?? "" };
+      const settings: ElementorSettings = {
+        title: node.content ?? "",
+        ...typographySettings(node.styles),
+        ...spacingSettings(node.styles, "_"),
+      };
       if (HEADER_SIZES.has(node.tagName)) settings.header_size = node.tagName;
-      applyGlobals(node, settings, "title_color", ctx.idMap);
+      applyColor(node, settings, "title_color", ctx.idMap);
+      applyTypographyGlobal(node, settings, ctx.idMap);
       applyDynamic(node, settings, "content", "title");
       return widget(id, "heading", settings);
     }
     case "text": {
-      const settings: ElementorSettings = { editor: `<p>${node.content ?? ""}</p>` };
-      applyGlobals(node, settings, "text_color", ctx.idMap);
+      const settings: ElementorSettings = {
+        editor: `<p>${node.content ?? ""}</p>`,
+        ...typographySettings(node.styles),
+        ...spacingSettings(node.styles, "_"),
+      };
+      applyColor(node, settings, "text_color", ctx.idMap);
+      applyTypographyGlobal(node, settings, ctx.idMap);
       applyDynamic(node, settings, "content", "editor");
       return widget(id, "text-editor", settings);
     }
@@ -214,16 +241,22 @@ function compileNode(node: AstNode, ctx: CompileCtx): ElementorElement | null {
       const settings: ElementorSettings = {
         text: node.content ?? "",
         link: { url: node.attributes.href ?? "#", is_external: "", nofollow: "", custom_attributes: "" },
+        ...typographySettings(node.styles),
+        ...spacingSettings(node.styles, "_"),
+        ...borderRadiusSetting(node.styles, "border_radius"),
       };
-      applyGlobals(node, settings, "button_text_color", ctx.idMap);
+      const bg = backgroundSettings(node.styles).background_color;
+      if (bg) settings.background_color = bg;
+      applyColor(node, settings, "button_text_color", ctx.idMap);
       applyDynamic(node, settings, "content", "text");
       return widget(id, "button", settings);
     }
     case "link": {
       const settings: ElementorSettings = {
         editor: `<a href="${node.attributes.href ?? "#"}">${node.content ?? ""}</a>`,
+        ...typographySettings(node.styles),
       };
-      applyGlobals(node, settings, "text_color", ctx.idMap);
+      applyColor(node, settings, "text_color", ctx.idMap);
       return widget(id, "text-editor", settings);
     }
     case "image": {
@@ -236,6 +269,8 @@ function compileNode(node: AstNode, ctx: CompileCtx): ElementorElement | null {
           size: "",
         },
         image_size: "full",
+        ...spacingSettings(node.styles, "_"),
+        ...borderRadiusSetting(node.styles, "_border_radius"),
       };
       applyDynamic(node, settings, "src", "image");
       return widget(id, "image", settings);
@@ -273,8 +308,19 @@ function compileNode(node: AstNode, ctx: CompileCtx): ElementorElement | null {
 }
 
 function compileContainer(node: AstNode, id: string, ctx: CompileCtx): ElementorElement {
-  const settings: ElementorSettings = {};
-  applyGlobals(node, settings, "background_color", ctx.idMap);
+  const settings: ElementorSettings = {
+    ...flexSettings(node.styles),
+    ...spacingSettings(node.styles, ""),
+    ...borderRadiusSetting(node.styles, "border_radius"),
+  };
+  // Fondo: referencia global (globalRefs.backgroundColor) si existe; si no, literal.
+  const bgId = node.globalRefs?.backgroundColor;
+  if (bgId && ctx.idMap.has(bgId)) {
+    settings.background_background = "classic";
+    mergeGlobal(settings, "background_color", `globals/colors?id=${ctx.idMap.get(bgId)}`);
+  } else {
+    Object.assign(settings, backgroundSettings(node.styles));
+  }
   const elements = node.children
     .map((c) => compileNode(c, ctx))
     .filter((e): e is ElementorElement => e !== null);

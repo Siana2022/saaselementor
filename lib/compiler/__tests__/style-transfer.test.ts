@@ -1,0 +1,90 @@
+import { describe, it, expect } from "vitest";
+import { parseLen, parseFourSides, typographySettings, flexSettings } from "../style-map";
+import { compilePageDocument } from "../compile";
+import { buildProjectAst } from "@/lib/parser/html-to-ast";
+import { compileProject } from "../compile";
+import type { ElementorElement } from "../elementor-types";
+
+function seededIds() {
+  let n = 0;
+  return () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`;
+}
+function walk(els: ElementorElement[], fn: (e: ElementorElement) => void) {
+  for (const e of els) {
+    fn(e);
+    walk(e.elements ?? [], fn);
+  }
+}
+
+describe("style-map helpers", () => {
+  it("parseLen", () => {
+    expect(parseLen("48px")).toEqual({ unit: "px", size: 48, sizes: [] });
+    expect(parseLen("1.5", "em")).toEqual({ unit: "em", size: 1.5, sizes: [] });
+    expect(parseLen("auto")).toBeUndefined();
+  });
+  it("parseFourSides shorthand", () => {
+    expect(parseFourSides("10px")).toMatchObject({ unit: "px", top: "10", right: "10", bottom: "10", left: "10", isLinked: true });
+    expect(parseFourSides("10px 20px")).toMatchObject({ top: "10", right: "20", bottom: "10", left: "20", isLinked: false });
+    expect(parseFourSides("0 auto")).toBeUndefined();
+  });
+  it("typographySettings", () => {
+    const s = typographySettings({ "font-family": "'Inter', sans-serif", "font-size": "58px", "font-weight": "700", "text-align": "center" });
+    expect(s).toMatchObject({
+      typography_typography: "custom",
+      typography_font_family: "Inter",
+      typography_font_size: { unit: "px", size: 58 },
+      typography_font_weight: "700",
+      align: "center",
+    });
+  });
+  it("flexSettings", () => {
+    const s = flexSettings({ display: "flex", "flex-direction": "column", "justify-content": "center", "align-items": "flex-start", gap: "16px" });
+    expect(s).toMatchObject({ flex_direction: "column", flex_justify_content: "center", flex_align_items: "flex-start" });
+    expect(s.flex_gap).toMatchObject({ unit: "px", size: 16 });
+  });
+});
+
+describe("transferencia de estilos end-to-end (CSS de clases -> settings)", () => {
+  it("heading/text/container llevan tipografía, color, fondo y espaciado", () => {
+    const html = `<html><head><style>
+      .hero{ display:flex; flex-direction:column; background-color:#01125B; padding:40px; gap:16px; border-radius:20px }
+      .hero h1{ font-family:Montserrat; font-size:58px; font-weight:700; color:#ffffff; text-align:center }
+      .hero p{ font-size:16px; color:#8ACDCF }
+    </style></head><body>
+      <section class="hero"><h1>Título</h1><p>Desc</p></section>
+    </body></html>`;
+    const project = buildProjectAst(html, { name: "home" }, { idFactory: seededIds() });
+    const bundle = compileProject(project, { elIdFactory: () => Math.random().toString(36).slice(2, 9) });
+
+    let container: ElementorElement | undefined;
+    let heading: ElementorElement | undefined;
+    let text: ElementorElement | undefined;
+    walk(bundle.documents[0]!.doc.content, (e) => {
+      if (e.elType === "container" && (e.settings.background_color || e.settings.flex_direction)) container = e;
+      if (e.widgetType === "heading") heading = e;
+      if (e.widgetType === "text-editor") text = e;
+    });
+
+    // Container: flex + fondo + padding + radius
+    expect(container?.settings).toMatchObject({
+      flex_direction: "column",
+      background_background: "classic",
+      background_color: "#01125B",
+    });
+    expect(container?.settings.padding).toMatchObject({ top: "40", isLinked: true });
+    expect(container?.settings.border_radius).toMatchObject({ top: "20" });
+
+    // Heading: tipografía + color + align
+    expect(heading?.settings).toMatchObject({
+      typography_typography: "custom",
+      typography_font_family: "Montserrat",
+      typography_font_size: { unit: "px", size: 58 },
+      typography_font_weight: "700",
+      title_color: "#ffffff",
+      align: "center",
+    });
+
+    // Text: color heredable respetado
+    expect(text?.settings.text_color).toBe("#8ACDCF");
+  });
+});
