@@ -37,6 +37,9 @@ Pendiente: afinar mapeos exactos de Elementor con **fixtures reales** del usuari
 
 ---
 
+## Añadido
+- [x] Informe de pre-vuelo del export (lib/compiler/report.ts + PreflightPanel): cobertura nativa, censo de widgets, fallbacks, globales y loops, con avisos.
+
 ## Pendiente
 - [x] Fixtures reales (páginas + Website Kit) + `scripts/analyze-fixture.ts`.
 - [x] Kit real: `site-settings.json` (system/custom colors + typography).

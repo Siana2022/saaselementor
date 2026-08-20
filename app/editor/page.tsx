@@ -4,6 +4,7 @@ import { CanvasIframe } from "@/components/CanvasIframe";
 import { ChatPanel } from "@/components/ChatPanel";
 import { NodeInspector } from "@/components/NodeInspector";
 import { ExportButton } from "@/components/ExportButton";
+import { PreflightPanel } from "@/components/PreflightPanel";
 
 export default function EditorPage() {
   return (
@@ -24,6 +25,12 @@ export default function EditorPage() {
           <div>
             <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-400">Selección</h2>
             <NodeInspector />
+          </div>
+          <div>
+            <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-400">
+              Pre-vuelo del export
+            </h2>
+            <PreflightPanel />
           </div>
           <div className="flex min-h-48 flex-1 flex-col">
             <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-400">Chat IA</h2>
