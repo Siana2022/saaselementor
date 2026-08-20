@@ -196,3 +196,33 @@ sitio) para clavar `kit.json` y los `_id` de system_colors/typography; y un
 **Template Kit .zip con `manifest.json`** para el formato del manifest. Además, el
 `template_id` del loop-grid es sintético (WordPress real necesita la plantilla
 guardada como post).
+
+## 12. Website Kit real (2026-08-19)
+
+Con un export real de *Importar/Exportar Kit* (`fixtures/kit/`) se ajustó el
+exporter para producir un **Website Kit importable**, no un formato inventado:
+
+```
+manifest.json            name/title/version/elementor_version, theme, experiments,
+                         site-settings{globalColors:true,...}, templates{}, content{page{}}
+site-settings.json       {content, settings{system_colors, custom_colors,
+                          system_typography, custom_typography, ...}, metadata, experiments}
+content/page/<id>.json   páginas — shape kit-interno {content, settings, metadata}
+templates/<id>.json      sub-templates de loops — mismo shape
+```
+
+Hallazgos clave (vs. formato provisional anterior):
+- El "kit" es `site-settings.json` con top-level `{content, settings, metadata,
+  theme, experiments}` (no `{version,title,type:"kit"}`). `experiments` aquí es
+  un OBJETO de flags (en el manifest es un array).
+- Colores: 4 slots de sistema con `_id` fijos `primary/secondary/text/accent`;
+  el resto en `custom_colors` con id propio. Igual para tipografías. `compileKit`
+  mapea los 4 primeros globales a los slots de sistema y el resto a custom.
+- Dentro del kit, cada documento usa `{content, settings, metadata}`; su
+  `title`/`doc_type` viven en el `manifest` (`templates[id]`, `content.page[id]`).
+- `globalRefs` → `globals/colors?id=<_id>` / `globals/typography?id=<_id>` con los
+  `_id` reales del kit (slug o custom).
+
+Tests de compatibilidad: `site-settings.json`, `manifest.json` y los documentos
+internos reales validan contra `SiteSettingsSchema`, `ManifestSchema` y
+`KitDocumentSchema` respectivamente.

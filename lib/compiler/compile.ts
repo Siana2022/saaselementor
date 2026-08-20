@@ -26,10 +26,10 @@ import type {
 } from "@/lib/core/ast/types";
 import {
   ElementorDocumentSchema,
-  ElementorKitSchema,
+  SiteSettingsSchema,
   type ElementorDocument,
   type ElementorElement,
-  type ElementorKit,
+  type SiteSettings,
   type ElementorSettings,
 } from "./elementor-types";
 
@@ -88,33 +88,48 @@ function compileTypography(typo: GlobalTypography, shortId: string) {
 }
 
 /**
- * Compila el GlobalSystemAst a un Kit de Elementor + mapa UUID->idCorto.
+ * Slots de sistema de Elementor. Los 4 primeros globales extraídos se mapean a
+ * estos slots (namespace separado para colores y tipografías); el resto van a
+ * `custom_*` con ids generados. `globalRefs` referencia el `_id` asignado.
+ */
+const SYSTEM_SLOTS = ["primary", "secondary", "text", "accent"] as const;
+
+/**
+ * Compila el GlobalSystemAst a `site-settings.json` (Kit real) + mapa
+ * UUID->_id (slug de sistema o id custom).
  */
 export function compileKit(
   gs: GlobalSystemAst,
   opts: CompileOptions = {},
-): { kit: ElementorKit; idMap: GlobalIdMap } {
+): { siteSettings: SiteSettings; idMap: GlobalIdMap } {
   const elId = opts.elIdFactory ?? defaultElId();
   const idMap: GlobalIdMap = new Map();
 
-  const system_colors = gs.colors.map((c) => {
-    const shortId = elId();
-    idMap.set(c.id, shortId);
-    return compileColor(c, shortId);
-  });
-  const system_typography = gs.typographies.map((t) => {
-    const shortId = elId();
-    idMap.set(t.id, shortId);
-    return compileTypography(t, shortId);
+  const system_colors: ReturnType<typeof compileColor>[] = [];
+  const custom_colors: ReturnType<typeof compileColor>[] = [];
+  gs.colors.forEach((c, i) => {
+    const slot = SYSTEM_SLOTS[i];
+    const _id = slot ?? elId();
+    idMap.set(c.id, _id);
+    (slot ? system_colors : custom_colors).push(compileColor(c, _id));
   });
 
-  const kit = ElementorKitSchema.parse({
-    version: SCHEMA_VERSION,
-    title: "Global Kit",
-    type: "kit",
-    settings: { system_colors, custom_colors: [], system_typography, custom_typography: [] },
+  const system_typography: ReturnType<typeof compileTypography>[] = [];
+  const custom_typography: ReturnType<typeof compileTypography>[] = [];
+  gs.typographies.forEach((t, i) => {
+    const slot = SYSTEM_SLOTS[i];
+    const _id = slot ?? elId();
+    idMap.set(t.id, _id);
+    (slot ? system_typography : custom_typography).push(compileTypography(t, _id));
   });
-  return { kit, idMap };
+
+  const siteSettings = SiteSettingsSchema.parse({
+    content: [],
+    settings: { system_colors, custom_colors, system_typography, custom_typography },
+    metadata: [],
+    experiments: [],
+  });
+  return { siteSettings, idMap };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -319,14 +334,14 @@ export interface CompiledDocument {
 }
 
 export interface CompiledBundle {
-  kit: ElementorKit;
+  siteSettings: SiteSettings;
   documents: CompiledDocument[];
 }
 
 /** Compila un ProjectAst completo (kit + páginas + sub-templates de loops). */
 export function compileProject(project: ProjectAst, opts: CompileOptions = {}): CompiledBundle {
   const elId = opts.elIdFactory ?? defaultElId();
-  const { kit, idMap } = compileKit(project.globalSystem, { elIdFactory: elId });
+  const { siteSettings, idMap } = compileKit(project.globalSystem, { elIdFactory: elId });
   const ctx: CompileCtx = { idMap, elId, loopTemplates: new Map() };
 
   const loopDocs: CompiledDocument[] = [];
@@ -355,5 +370,5 @@ export function compileProject(project: ProjectAst, opts: CompileOptions = {}): 
     });
   }
   documents.push(...loopDocs);
-  return { kit, documents };
+  return { siteSettings, documents };
 }

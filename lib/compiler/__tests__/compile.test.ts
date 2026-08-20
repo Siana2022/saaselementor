@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import JSZip from "jszip";
 import { compileKit, compileProject, compilePageDocument } from "../compile";
 import { buildFileMap, exportProjectZip } from "../export-zip";
-import { ElementorDocumentSchema, ElementorKitSchema } from "../elementor-types";
+import { ElementorDocumentSchema, SiteSettingsSchema } from "../elementor-types";
 import { buildProjectAst } from "@/lib/parser/html-to-ast";
 import { applyMutationsToProject } from "@/lib/core/mutations";
 import { parseAstNode, parseProjectAst, type GlobalSystemAst, type AstNode } from "@/lib/core/ast/types";
@@ -34,18 +34,20 @@ describe("compileKit", () => {
       colors: [{ id: UUID_B, name: "Primary", value: "#0af", source: "root-variable" }],
       typographies: [{ id: UUID_C, name: "H1", fontFamily: "'Inter', sans-serif", fontSize: "48px", fontWeight: "700" }],
     };
-    const { kit, idMap } = compileKit(gs, { elIdFactory: seededElIds() });
-    expect(ElementorKitSchema.parse(kit)).toBeTruthy();
-    expect(kit.settings.system_colors[0]).toMatchObject({ title: "Primary", color: "#0af" });
-    expect(kit.settings.system_typography[0]).toMatchObject({
+    const { siteSettings, idMap } = compileKit(gs, { elIdFactory: seededElIds() });
+    expect(SiteSettingsSchema.parse(siteSettings)).toBeTruthy();
+    expect(siteSettings.settings.system_colors[0]).toMatchObject({ _id: "primary", title: "Primary", color: "#0af" });
+    expect(siteSettings.settings.system_typography[0]).toMatchObject({
+      _id: "primary",
       title: "H1",
       typography_typography: "custom",
       typography_font_family: "Inter",
       typography_font_size: { unit: "px", size: 48 },
       typography_font_weight: "700",
     });
-    expect(idMap.get(UUID_B)).toBe("el00001");
-    expect(idMap.get(UUID_C)).toBe("el00002");
+    // 1er color/typografía -> slot de sistema "primary"
+    expect(idMap.get(UUID_B)).toBe("primary");
+    expect(idMap.get(UUID_C)).toBe("primary");
   });
 });
 
@@ -109,13 +111,13 @@ describe("globals wiring (__globals__)", () => {
       colors: [{ id: UUID_B, name: "Primary", value: "#0af", source: "root-variable" }],
       typographies: [],
     };
-    const { idMap } = compileKit(gs, { elIdFactory: () => "prim01" });
+    const { idMap } = compileKit(gs, { elIdFactory: seededElIds() });
     const doc = compilePageDocument(
       pageRoot([{ id: UUID_C, tagName: "h1", elementorRole: "heading", content: "H", globalRefs: { color: UUID_B } }]),
       "home", idMap, { elIdFactory: seededElIds() },
     );
     const globals = doc.content[0]?.settings.__globals__ as Record<string, string>;
-    expect(globals.title_color).toBe("globals/colors?id=prim01");
+    expect(globals.title_color).toBe("globals/colors?id=primary");
   });
 });
 
@@ -126,7 +128,7 @@ describe("compileProject + export", () => {
     const project = buildProjectAst(html, { name: "home" }, { idFactory: seededUuids() });
 
     const bundle = compileProject(project, { elIdFactory: seededElIds() });
-    expect(bundle.kit.settings.system_colors).toHaveLength(1);
+    expect(bundle.siteSettings.settings.system_colors).toHaveLength(1);
     expect(bundle.documents.map((d) => d.type)).toEqual(["page"]); // sin loop-item
   });
 
@@ -161,7 +163,7 @@ describe("compileProject + export", () => {
     for (const d of bundle.documents) expect(ElementorDocumentSchema.parse(d.doc)).toBeTruthy();
   });
 
-  it("buildFileMap produce manifest.json, kit.json y templates/", () => {
+  it("buildFileMap produce un Website Kit real (manifest + site-settings + content/page)", () => {
     const project = parseProjectAst({
       id: UUID_A, name: "Mi Sitio",
       globalSystem: emptyGlobals(UUID_B),
@@ -169,11 +171,15 @@ describe("compileProject + export", () => {
     });
     const files = buildFileMap(project, { elIdFactory: seededElIds() });
     expect(Object.keys(files)).toEqual(
-      expect.arrayContaining(["manifest.json", "kit.json", "templates/home.json"]),
+      expect.arrayContaining(["manifest.json", "site-settings.json", "content/page/100.json"]),
     );
     const manifest = JSON.parse(files["manifest.json"]!);
     expect(manifest.name).toBe("mi-sitio");
-    expect(manifest.templates.home).toMatchObject({ doc_type: "page", name: "home" });
+    expect(manifest.content.page["100"]).toMatchObject({ doc_type: "wp-page", title: "home" });
+    // el documento interno usa el shape {content, settings, metadata}
+    const doc = JSON.parse(files["content/page/100.json"]!);
+    expect(Object.keys(doc).sort()).toEqual(["content", "metadata", "settings"]);
+    expect(doc.content[0].widgetType).toBe("heading");
   });
 
   it("exportProjectZip genera un ZIP legible con las entradas esperadas", async () => {
@@ -186,9 +192,9 @@ describe("compileProject + export", () => {
     expect(bytes.byteLength).toBeGreaterThan(0);
     const zip = await JSZip.loadAsync(bytes);
     expect(zip.file("manifest.json")).toBeTruthy();
-    expect(zip.file("kit.json")).toBeTruthy();
-    expect(zip.file("templates/home.json")).toBeTruthy();
-    const doc = JSON.parse(await zip.file("templates/home.json")!.async("string"));
+    expect(zip.file("site-settings.json")).toBeTruthy();
+    expect(zip.file("content/page/100.json")).toBeTruthy();
+    const doc = JSON.parse(await zip.file("content/page/100.json")!.async("string"));
     expect(doc.content[0].widgetType).toBe("text-editor");
   });
 });

@@ -26,3 +26,38 @@ describe("compatibilidad con fixtures reales de Elementor", () => {
     });
   }
 });
+
+import { SiteSettingsSchema, ManifestSchema, KitDocumentSchema } from "../elementor-types";
+
+const KIT_DIR = join(process.cwd(), "fixtures", "kit");
+
+describe("compatibilidad con el Website Kit real", () => {
+  it("site-settings.json valida contra SiteSettingsSchema", () => {
+    const p = join(KIT_DIR, "site-settings.json");
+    if (!existsSync(p)) return; // fixture opcional
+    const ss = SiteSettingsSchema.parse(JSON.parse(readFileSync(p, "utf8")));
+    expect(ss.settings.system_colors.length).toBeGreaterThan(0);
+    // slugs de sistema reales
+    expect(ss.settings.system_colors.map((c) => c._id)).toContain("primary");
+    expect(ss.settings.custom_colors.length).toBeGreaterThan(0);
+    expect(ss.settings.system_typography[0]?.typography_typography).toBe("custom");
+  });
+
+  it("manifest.json valida contra ManifestSchema", () => {
+    const p = join(KIT_DIR, "manifest.json");
+    if (!existsSync(p)) return;
+    const m = ManifestSchema.parse(JSON.parse(readFileSync(p, "utf8")));
+    expect(m.elementor_version).toBeTruthy();
+    expect(Object.keys(m.templates).length).toBeGreaterThan(0);
+    expect(m["site-settings"].globalColors).toBe(true);
+  });
+
+  it("documentos internos del kit validan contra KitDocumentSchema", () => {
+    for (const rel of ["content/page/180.json", "templates/21.json"]) {
+      const p = join(KIT_DIR, rel);
+      if (!existsSync(p)) continue;
+      const doc = KitDocumentSchema.parse(JSON.parse(readFileSync(p, "utf8")));
+      expect(Array.isArray(doc.content)).toBe(true);
+    }
+  });
+});
