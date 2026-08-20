@@ -48,6 +48,9 @@ Pendiente: afinar mapeos exactos de Elementor con **fixtures reales** del usuari
 ## Import validity
 - [x] manifest.version=3.0 (formato kit real) + page settings como objeto {template}.
 
+## Export standalone
+- [x] exportTemplatesZip: plantillas individuales (formato standalone, estilos inline) importables por Plantillas -> Importar. Opción inlineStyles en el compilador.
+
 ## Pendiente
 - [x] Fixtures reales (páginas + Website Kit) + `scripts/analyze-fixture.ts`.
 - [x] Kit real: `site-settings.json` (system/custom colors + typography).

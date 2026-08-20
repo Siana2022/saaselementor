@@ -198,3 +198,24 @@ describe("compileProject + export", () => {
     expect(doc.content[0].widgetType).toBe("text-editor");
   });
 });
+
+describe("exportTemplatesZip (plantillas standalone inline)", () => {
+  it("genera JSONs con formato standalone y estilos inline (sin __globals__)", async () => {
+    const { exportTemplatesZip } = await import("../export-zip");
+    const html = `<html><head><style>.h{color:#01125B;font-size:40px;background-color:#8ACDCF}</style></head><body><section class="h"><h1 class="h">T</h1></section></body></html>`;
+    const project = buildProjectAst(html, { name: "home" }, { idFactory: seededUuids() });
+    const bytes = await exportTemplatesZip(project, { elIdFactory: seededElIds() });
+    const zip = await JSZip.loadAsync(bytes);
+    const file = zip.file("home.json");
+    expect(file).toBeTruthy();
+    const doc = JSON.parse(await file!.async("string"));
+    // formato standalone
+    expect(doc.type).toBe("page");
+    expect(doc.version).toBe("0.4");
+    expect(Array.isArray(doc.content)).toBe(true);
+    // estilos inline literales, NO globals
+    const json = JSON.stringify(doc);
+    expect(json).not.toContain("__globals__");
+    expect(json).toContain("#01125B");
+  });
+});

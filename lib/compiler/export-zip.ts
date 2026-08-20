@@ -116,3 +116,26 @@ export async function exportProjectZip(
   }
   return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
 }
+
+/**
+ * Genera un ZIP de PLANTILLAS INDIVIDUALES en formato standalone
+ * `{content, page_settings, version, title, type}` — importables una a una por
+ * *Elementor → Plantillas → Importar plantillas*. Estilos INLINE (sin Kit), así
+ * el diseño se ve aunque no se importen los globales.
+ */
+export async function exportTemplatesZip(
+  project: ProjectAst,
+  opts: CompileOptions = {},
+): Promise<Uint8Array> {
+  const bundle = compileProject(project, { ...opts, inlineStyles: true });
+  const zip = new JSZip();
+  const used = new Set<string>();
+  for (const d of bundle.documents) {
+    let slug = slugify(d.name);
+    let n = 1;
+    while (used.has(slug)) slug = `${slugify(d.name)}-${++n}`;
+    used.add(slug);
+    zip.file(`${slug}.json`, JSON.stringify(d.doc, null, 2));
+  }
+  return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+}

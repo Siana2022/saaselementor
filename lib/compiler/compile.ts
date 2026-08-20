@@ -47,6 +47,8 @@ const SCHEMA_VERSION = "0.4";
 export interface CompileOptions {
   /** Fábrica de IDs cortos de Elementor (7 chars). Inyectable para tests. */
   elIdFactory?: () => string;
+  /** Si true, ignora globalRefs y emite valores literales (para export standalone). */
+  inlineStyles?: boolean;
 }
 
 function defaultElId(): () => string {
@@ -59,6 +61,8 @@ export type GlobalIdMap = Map<string, string>;
 interface CompileCtx {
   idMap: GlobalIdMap;
   elId: () => string;
+  /** Si false, no usa globalRefs (emite valores literales inline). */
+  useGlobals: boolean;
   /** nodeId de un loop confirmado -> datos del widget loop-grid. */
   loopTemplates: Map<string, { templateId: string; columns: string }>;
 }
@@ -162,11 +166,11 @@ function applyColor(
   node: AstNode,
   settings: ElementorSettings,
   colorKey: string,
-  idMap: GlobalIdMap,
+  ctx: CompileCtx,
 ): void {
   const gid = node.globalRefs?.color;
-  if (gid && idMap.has(gid)) {
-    mergeGlobal(settings, colorKey, `globals/colors?id=${idMap.get(gid)}`);
+  if (ctx.useGlobals && gid && ctx.idMap.has(gid)) {
+    mergeGlobal(settings, colorKey, `globals/colors?id=${ctx.idMap.get(gid)}`);
     return;
   }
   const c = node.styles["color"];
@@ -174,13 +178,14 @@ function applyColor(
 }
 
 /** Tipografía global (si hay ref): sustituye a la tipografía inline. */
-function applyTypographyGlobal(node: AstNode, settings: ElementorSettings, idMap: GlobalIdMap): void {
+function applyTypographyGlobal(node: AstNode, settings: ElementorSettings, ctx: CompileCtx): void {
+  if (!ctx.useGlobals) return;
   const gid = node.globalRefs?.typography;
-  if (!gid || !idMap.has(gid)) return;
+  if (!gid || !ctx.idMap.has(gid)) return;
   for (const k of Object.keys(settings)) {
     if (k.startsWith("typography_")) delete settings[k];
   }
-  mergeGlobal(settings, "typography_typography", `globals/typography?id=${idMap.get(gid)}`);
+  mergeGlobal(settings, "typography_typography", `globals/typography?id=${ctx.idMap.get(gid)}`);
 }
 
 /** Aplica dynamicMapping como `__dynamic__` (formato [elementor-tag ...]). */
@@ -217,8 +222,8 @@ function compileNode(node: AstNode, ctx: CompileCtx): ElementorElement | null {
         ...spacingSettings(node.styles, "_"),
       };
       if (HEADER_SIZES.has(node.tagName)) settings.header_size = node.tagName;
-      applyColor(node, settings, "title_color", ctx.idMap);
-      applyTypographyGlobal(node, settings, ctx.idMap);
+      applyColor(node, settings, "title_color", ctx);
+      applyTypographyGlobal(node, settings, ctx);
       applyDynamic(node, settings, "content", "title");
       return widget(id, "heading", settings);
     }
@@ -228,8 +233,8 @@ function compileNode(node: AstNode, ctx: CompileCtx): ElementorElement | null {
         ...typographySettings(node.styles),
         ...spacingSettings(node.styles, "_"),
       };
-      applyColor(node, settings, "text_color", ctx.idMap);
-      applyTypographyGlobal(node, settings, ctx.idMap);
+      applyColor(node, settings, "text_color", ctx);
+      applyTypographyGlobal(node, settings, ctx);
       applyDynamic(node, settings, "content", "editor");
       return widget(id, "text-editor", settings);
     }
@@ -243,7 +248,7 @@ function compileNode(node: AstNode, ctx: CompileCtx): ElementorElement | null {
       };
       const bg = backgroundSettings(node.styles).background_color;
       if (bg) settings.background_color = bg;
-      applyColor(node, settings, "button_text_color", ctx.idMap);
+      applyColor(node, settings, "button_text_color", ctx);
       applyDynamic(node, settings, "content", "text");
       return widget(id, "button", settings);
     }
@@ -252,7 +257,7 @@ function compileNode(node: AstNode, ctx: CompileCtx): ElementorElement | null {
         editor: `<a href="${node.attributes.href ?? "#"}">${node.content ?? ""}</a>`,
         ...typographySettings(node.styles),
       };
-      applyColor(node, settings, "text_color", ctx.idMap);
+      applyColor(node, settings, "text_color", ctx);
       return widget(id, "text-editor", settings);
     }
     case "image": {
@@ -311,7 +316,7 @@ function compileContainer(node: AstNode, id: string, ctx: CompileCtx): Elementor
   };
   // Fondo color: referencia global (globalRefs.backgroundColor) si existe; si no, literal.
   const bgId = node.globalRefs?.backgroundColor;
-  if (bgId && ctx.idMap.has(bgId)) {
+  if (ctx.useGlobals && bgId && ctx.idMap.has(bgId)) {
     settings.background_background = "classic";
     mergeGlobal(settings, "background_color", `globals/colors?id=${ctx.idMap.get(bgId)}`);
   } else {
@@ -351,7 +356,7 @@ export function compilePageDocument(
   opts: CompileOptions = {},
 ): ElementorDocument {
   const elId = opts.elIdFactory ?? defaultElId();
-  return compileDocument(root, title, "page", { idMap, elId, loopTemplates: new Map() });
+  return compileDocument(root, title, "page", { idMap, elId, useGlobals: !opts.inlineStyles, loopTemplates: new Map() });
 }
 
 /** Recorre el árbol y devuelve los nodos de loop CONFIRMADO (loop_grid/repeater). */
@@ -386,7 +391,7 @@ export interface CompiledBundle {
 export function compileProject(project: ProjectAst, opts: CompileOptions = {}): CompiledBundle {
   const elId = opts.elIdFactory ?? defaultElId();
   const { siteSettings, idMap } = compileKit(project.globalSystem, { elIdFactory: elId });
-  const ctx: CompileCtx = { idMap, elId, loopTemplates: new Map() };
+  const ctx: CompileCtx = { idMap, elId, useGlobals: !opts.inlineStyles, loopTemplates: new Map() };
 
   const loopDocs: CompiledDocument[] = [];
   // Pass 1: por cada loop confirmado, compila su plantilla como doc "loop-item"
