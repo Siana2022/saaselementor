@@ -1,15 +1,37 @@
 /**
- * POST /api/ingest — { html, name? } -> { project, css }
- * Ingesta Two-Pass server-side (cheerio). Devuelve el ProjectAst + CSS original.
+ * POST /api/ingest
+ *   - JSON  { html, name? }              -> ingesta de HTML pegado
+ *   - multipart/form-data { file, name? } -> ingesta de un ZIP completo
+ * Devuelve { project, css }.
  */
 import { NextResponse } from "next/server";
 import { buildProjectAst } from "@/lib/parser/html-to-ast";
 import { collectStyleCss } from "@/lib/parser/global-system";
+import { ingestZipToHtml } from "@/lib/parser/ingest-zip";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
+    const contentType = req.headers.get("content-type") ?? "";
+
+    // --- Ingesta de ZIP (subida de archivo) ---
+    if (contentType.includes("multipart/form-data")) {
+      const form = await req.formData();
+      const file = form.get("file");
+      if (!(file instanceof File)) {
+        return NextResponse.json({ error: "Falta el archivo ZIP" }, { status: 400 });
+      }
+      const buffer = new Uint8Array(await file.arrayBuffer());
+      const { html, fileName, name } = await ingestZipToHtml(buffer);
+      const projectName =
+        (typeof form.get("name") === "string" && (form.get("name") as string)) || name;
+      const project = buildProjectAst(html, { name: projectName, fileName });
+      const css = collectStyleCss(html);
+      return NextResponse.json({ project, css });
+    }
+
+    // --- Ingesta de HTML pegado ---
     const body = await req.json();
     const html = typeof body?.html === "string" ? body.html : "";
     const name = typeof body?.name === "string" && body.name ? body.name : "home";
