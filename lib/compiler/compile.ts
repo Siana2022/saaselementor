@@ -91,6 +91,9 @@ function compileTypography(typo: GlobalTypography, shortId: string) {
     ...(parseCssSize(typo.letterSpacing)
       ? { typography_letter_spacing: parseCssSize(typo.letterSpacing) }
       : {}),
+    ...(typo.textTransform && typo.textTransform !== "none"
+      ? { typography_text_transform: typo.textTransform }
+      : {}),
   };
 }
 

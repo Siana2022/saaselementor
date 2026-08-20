@@ -65,26 +65,27 @@ describe("transferencia de estilos end-to-end (CSS de clases -> settings)", () =
       if (e.widgetType === "text-editor") text = e;
     });
 
-    // Container: flex + fondo + padding + radius
-    expect(container?.settings).toMatchObject({
-      flex_direction: "column",
-      background_background: "classic",
-      background_color: "#01125B",
-    });
+    // Container: flex + padding + radius literales; fondo GLOBALIZADO (DRY)
+    expect(container?.settings).toMatchObject({ flex_direction: "column", background_background: "classic" });
     expect(container?.settings.padding).toMatchObject({ top: "40", isLinked: true });
     expect(container?.settings.border_radius).toMatchObject({ top: "20" });
+    const cGlobals = container?.settings.__globals__ as Record<string, string>;
+    expect(cGlobals.background_color).toMatch(/^globals\/colors\?id=/);
 
-    // Heading: tipografía + color + align
-    expect(heading?.settings).toMatchObject({
-      typography_typography: "custom",
-      typography_font_family: "Montserrat",
-      typography_font_size: { unit: "px", size: 58 },
-      typography_font_weight: "700",
-      title_color: "#ffffff",
-      align: "center",
-    });
+    // Heading: color y tipografía GLOBALIZADOS; align inline
+    expect(heading?.settings.align).toBe("center");
+    const hGlobals = heading?.settings.__globals__ as Record<string, string>;
+    expect(hGlobals.title_color).toMatch(/^globals\/colors\?id=/);
+    expect(hGlobals.typography_typography).toMatch(/^globals\/typography\?id=/);
 
-    // Text: color heredable respetado
-    expect(text?.settings.text_color).toBe("#8ACDCF");
+    // Text: color de texto globalizado
+    const tGlobals = text?.settings.__globals__ as Record<string, string>;
+    expect(tGlobals.text_color).toMatch(/^globals\/colors\?id=/);
+
+    // El Kit contiene los valores reales (fidelidad end-to-end)
+    const colors = bundle.siteSettings.settings.system_colors.concat(bundle.siteSettings.settings.custom_colors);
+    expect(colors.map((c) => c.color)).toEqual(expect.arrayContaining(["#01125B", "#ffffff", "#8ACDCF"]));
+    const typos = bundle.siteSettings.settings.system_typography.concat(bundle.siteSettings.settings.custom_typography);
+    expect(typos.some((t) => t.typography_font_family === "Montserrat")).toBe(true);
   });
 });

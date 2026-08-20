@@ -32,6 +32,7 @@ import {
 } from "@/lib/core/ast/types";
 import { collectStyleCss, extractGlobalSystem } from "./global-system";
 import { computeStyles } from "./css-resolver";
+import { deriveGlobalsFromUsage, linkGlobalRefs as linkGlobalRefsUsage } from "./global-usage";
 
 export interface HtmlParseOptions {
   idFactory?: () => string;
@@ -350,8 +351,23 @@ export function buildProjectAst(
 ): ProjectAst {
   const idFactory = options.idFactory ?? uuidv4;
   const css = collectStyleCss(html);
-  const globalSystem = extractGlobalSystem(css, { idFactory });
-  const page = htmlToPageAst(html, meta, { ...options, idFactory, globalSystem });
+
+  // 1) AST con estilos computados (sin enlazar globales todavía).
+  const root = htmlToAst(html, { ...options, idFactory, css, globalSystem: undefined });
+
+  // 2) Globales: base desde :root + derivados por frecuencia de uso.
+  const base = extractGlobalSystem(css, { idFactory });
+  const globalSystem = deriveGlobalsFromUsage(root, base, idFactory);
+
+  // 3) Enlaza globalRefs (color/fondo/tipografía) en cada nodo.
+  linkGlobalRefsUsage(root, globalSystem);
+
+  const page = PageAstSchema.parse({
+    id: idFactory(),
+    name: meta.name,
+    root,
+    source: { fileName: meta.fileName, templateType: "page" },
+  });
   return ProjectAstSchema.parse({
     id: idFactory(),
     name: meta.name,

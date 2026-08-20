@@ -40,6 +40,11 @@ Pendiente: afinar mapeos exactos de Elementor con **fixtures reales** del usuari
 ## Añadido
 - [x] Informe de pre-vuelo del export (lib/compiler/report.ts + PreflightPanel): cobertura nativa, censo de widgets, fallbacks, globales y loops, con avisos.
 
+## Motor de fidelidad de estilos (hecho)
+- [x] Fase 1: resolver de cascada CSS (clases/tags/inline, especificidad, herencia).
+- [x] Fase 2: transferencia de estilos computados a settings de Elementor.
+- [x] Fase 3: globales por uso (colores/tipografías) + enlazado de globalRefs (DRY).
+
 ## Pendiente
 - [x] Fixtures reales (páginas + Website Kit) + `scripts/analyze-fixture.ts`.
 - [x] Kit real: `site-settings.json` (system/custom colors + typography).
@@ -47,7 +52,8 @@ Pendiente: afinar mapeos exactos de Elementor con **fixtures reales** del usuari
 - [x] Documentos kit-internos {content, settings, metadata} en content/page + templates.
 - [x] Loop dinámico: loop-grid + loop-item con template_id (rol confirmado).
 - [ ] Mapear más widgets nativos (icon-box, nav-menu, form, posts, video, social-icons, nested-carousel).
-- [ ] Responsive: emitir variantes _tablet/_mobile en tipografías y estilos.
+- [ ] Responsive: capturar y emitir variantes _tablet/_mobile.
+- [ ] Nombrar globales de forma semántica (hoy "Color N"/"Estilo N").
 - [x] Ingesta de ZIP (HTML + <link> CSS externos + imágenes embebidas como data URI).
 - [ ] Verificar import real en una instalación Elementor (round-trip).
 - [ ] Tests de integración de rutas API; auth / multi-proyecto.
