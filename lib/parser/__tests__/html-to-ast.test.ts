@@ -139,3 +139,16 @@ describe("buildProjectAst — integración Two-Pass", () => {
     expect(page.root.tagName).toBe("body");
   });
 });
+
+describe("htmlToAst — SVG como bloque único", () => {
+  it("no desciende dentro de <svg> (sin nodos circle/path)", () => {
+    const html = `<body><div><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/><path d="M0 0"/></svg></div></body>`;
+    const root = htmlToAst(html, { idFactory: seededIds() });
+    const svg = find(root, (n) => n.tagName === "svg")!;
+    expect(svg.elementorRole).toBe("html_widget");
+    expect(svg.children).toEqual([]);
+    expect(svg.rawHtml).toContain("<circle");
+    expect(find(root, (n) => n.tagName === "circle")).toBeUndefined();
+    expect(find(root, (n) => n.tagName === "path")).toBeUndefined();
+  });
+});

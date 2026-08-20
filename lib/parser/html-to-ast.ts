@@ -56,8 +56,11 @@ const SKIP_TAGS = new Set([
   "base",
 ]);
 
-/** Etiquetas que se envuelven como HTML crudo (JS/embeds indescifrables). */
-const RAW_HTML_TAGS = new Set(["iframe", "object", "embed", "canvas"]);
+/**
+ * Etiquetas que se envuelven como HTML crudo (JS/embeds/SVG). No se desciende
+ * en sus hijos: `svg` se preserva íntegro (evita nodos circle/path basura).
+ */
+const RAW_HTML_TAGS = new Set(["iframe", "object", "embed", "canvas", "svg"]);
 
 const TEXT_TAGS = new Set([
   "p",
@@ -115,7 +118,6 @@ function inferRole(
   if (/^h[1-6]$/.test(t)) return "heading";
   if (t === "img" || t === "picture") return "image";
   if (t === "video") return "video";
-  if (t === "svg") return "icon";
   if (t === "i" && /\b(fa|fas|far|fab|icon|material|bi|glyphicon)\b/.test(cls))
     return "icon";
   if (t === "button") return "button";
