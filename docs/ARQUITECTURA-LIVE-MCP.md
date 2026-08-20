@@ -109,12 +109,21 @@ Transporte / alojamiento:
 
 ---
 
-## 4. Qué es automático y qué manual (honesto)
+## 4. Qué es automático y qué manual (con el puente en vivo)
 
-- **Automático:** estructura, containers, anchos (con las claves aprendidas),
-  tipografía, color, fondos, referencias a globales, textos.
-- **Manual (igual que con la skill hoy):** asignar **imágenes** a la Media Library
-  (necesitan el ID de adjunto real), enlazar **Dynamic Tags**, y el pulido final.
+La conexión en vivo cambia lo que era manual con la skill/ZIP:
+
+- **Automático:** estructura, containers, anchos (claves aprendidas), tipografía,
+  color, fondos, referencias a globales, textos.
+- **Imágenes → AUTOMÁTICO** (lo que antes era manual). El puente sube cada imagen a
+  la Media Library vía `POST /wp/v2/media` (nativo de WP), obtiene el **ID de adjunto
+  real** y la skill escribe `image:{url,id}` / `background_image:{url,id}` enlazados.
+  Solo es posible porque el puente está conectado al WP real (un ZIP ciego no puede).
+- **Dynamic Tags → SEMI-AUTOMÁTICO.** El puente sabe escribir la clave `__dynamic__`
+  (`[elementor-tag name="…" …]`). Requiere que existan los CPT/campos (JetEngine/ACF)
+  y decidir el mapeo: el puente **lee los campos** del WP, la skill **propone** el
+  binding, tú **confirmas** y se escribe. De "widget por widget" a "proponer+confirmar".
+- **Manual (pulido):** ajustes finos de diseño y revisión final.
 
 ---
 
@@ -134,8 +143,10 @@ Transporte / alojamiento:
 | **0 · Base** | Plugin WP con `GET /ping` + `POST /page` | Empujar `ceivan-home-hero.json` con `curl` y ver la página aparecer en tu Elementor. |
 | **1 · Puente local** | MCP (stdio) con ping/list/create/append | Construir una página en vivo desde Claude Code/Desktop, conversando. |
 | **2 · Skill en vivo** | Receta adaptada a herramientas MCP | Montar una home paso a paso decidiendo tú. |
+| **2b · Imágenes** | Endpoint de subida a Media Library + wiring `image:{url,id}` | Que el hero y el logo entren enlazados solos. |
 | **3 · Remoto (opcional)** | MCP en Vercel como conector de Claude.ai | Que el equipo lo use desde el navegador. |
-| **4 · Ampliación** | Multi-sitio, biblioteca, globales, secciones reutilizables | — |
+| **4 · Datos + Dynamic Tags** | Crear CPT/campos (skin) + leer campos + proponer/escribir `__dynamic__` | Bindings semi-automáticos con confirmación. |
+| **5 · Ampliación** | Multi-sitio, biblioteca, secciones reutilizables | — |
 
 Se valida cada fase antes de la siguiente (la Fase 0 es barata y prueba lo esencial:
 que se puede escribir en Elementor desde fuera).
