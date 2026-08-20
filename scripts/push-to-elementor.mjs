@@ -42,7 +42,7 @@ if (!content) {
 }
 
 const auth = "Basic " + Buffer.from(`${user}:${pass}`).toString("base64");
-const endpoint = `${url}/wp-json/elebridge/v1/page`;
+const endpoint = `${url}/?rest_route=/elebridge/v1/page`;
 
 const body = {
   title: title || doc.title || "Página (bridge)",
