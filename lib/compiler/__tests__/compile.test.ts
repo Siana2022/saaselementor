@@ -210,7 +210,7 @@ describe("exportTemplatesZip (plantillas standalone inline)", () => {
     expect(file).toBeTruthy();
     const doc = JSON.parse(await file!.async("string"));
     // formato standalone
-    expect(doc.type).toBe("page");
+    expect(doc.type).toBe("container");
     expect(doc.version).toBe("0.4");
     expect(Array.isArray(doc.content)).toBe(true);
     // estilos inline literales, NO globals

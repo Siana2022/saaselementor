@@ -163,21 +163,57 @@ export function borderRadiusSetting(styles: StyleMap, key: string): ElementorSet
   return br ? { [key]: br } : {};
 }
 
-/** Ajustes de container flexbox desde display/flex-*. */
+/** Ajustes de container flexbox desde display/flex-* (grid -> row + wrap). */
 export function flexSettings(styles: StyleMap): ElementorSettings {
   const out: ElementorSettings = {};
   const display = styles["display"];
-  if (display !== "flex" && display !== "inline-flex") return out;
+  const isFlex = display === "flex" || display === "inline-flex";
+  const isGrid = display === "grid" || display === "inline-grid";
+  if (!isFlex && !isGrid) return out;
 
-  const dir = styles["flex-direction"];
-  out.flex_direction = dir === "column" ? "column" : "row";
+  if (isGrid) {
+    // La receta: reproducir grids con flex row + wrap (evita claves de grid).
+    out.flex_direction = "row";
+    out.flex_wrap = "wrap";
+  } else {
+    const dir = styles["flex-direction"];
+    out.flex_direction = dir === "column" ? "column" : "row";
+    if (styles["flex-wrap"] === "wrap") out.flex_wrap = "wrap";
+  }
 
   const justify = styles["justify-content"];
   if (justify) out.flex_justify_content = justify;
   const align = styles["align-items"];
   if (align) out.flex_align_items = align;
 
-  const gap = parseLen(styles["gap"]);
-  if (gap) out.flex_gap = { ...gap, column: String(gap.size), row: String(gap.size) };
+  const gap = parseLen(styles["gap"] ?? styles["grid-gap"] ?? styles["column-gap"]);
+  if (gap) {
+    out.flex_gap = { ...gap, column: String(gap.size), row: String(gap.size), isLinked: true };
+  }
   return out;
+}
+
+/**
+ * Ancho de un container hijo. Clave para que las filas flex no colapsen:
+ * un hijo sin ancho vale 100% por defecto y rompe `space-between`.
+ *   - %  -> width en %
+ *   - px -> width en px + flex_grow:0/flex_shrink:0 (panel fijo)
+ *   - fit-content -> width unidad custom
+ */
+export function widthSettings(styles: StyleMap): ElementorSettings {
+  const w = styles["width"];
+  if (!w) return {};
+  const v = w.trim();
+  if (/fit-content|max-content|min-content/.test(v)) {
+    return { width: { unit: "custom", size: "fit-content", sizes: [] }, _flex_grow: 0 };
+  }
+  const m = v.match(/^(-?[\d.]+)(px|%|rem|em|vw|vh)$/);
+  if (!m || m[1] === undefined) return {};
+  const size = Number.parseFloat(m[1]);
+  if (Number.isNaN(size)) return {};
+  if (m[2] === "%") {
+    return { width: { unit: "%", size, sizes: [] } };
+  }
+  const px = m[2] === "rem" || m[2] === "em" ? size * 16 : size;
+  return { width: { unit: "px", size: px, sizes: [] }, flex_grow: 0, flex_shrink: 0 };
 }

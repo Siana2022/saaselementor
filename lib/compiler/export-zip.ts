@@ -135,7 +135,10 @@ export async function exportTemplatesZip(
     let n = 1;
     while (used.has(slug)) slug = `${slugify(d.name)}-${++n}`;
     used.add(slug);
-    zip.file(`${slug}.json`, JSON.stringify(d.doc, null, 2));
+    // `type:"container"` es el tipo válido para importar por Plantillas →
+    // Importar plantillas (a diferencia de "page", que da "Invalid template type").
+    const doc = { ...d.doc, type: "container" };
+    zip.file(`${slug}.json`, JSON.stringify(doc, null, 2));
   }
   return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
 }

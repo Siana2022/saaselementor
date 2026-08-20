@@ -39,6 +39,7 @@ import {
   backgroundImageSettings,
   borderRadiusSetting,
   flexSettings,
+  widthSettings,
   parseLen,
 } from "./style-map";
 
@@ -311,6 +312,7 @@ function compileNode(node: AstNode, ctx: CompileCtx): ElementorElement | null {
 function compileContainer(node: AstNode, id: string, ctx: CompileCtx): ElementorElement {
   const settings: ElementorSettings = {
     ...flexSettings(node.styles),
+    ...widthSettings(node.styles),
     ...spacingSettings(node.styles, ""),
     ...borderRadiusSetting(node.styles, "border_radius"),
   };
