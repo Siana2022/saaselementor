@@ -152,3 +152,28 @@ describe("htmlToAst — SVG como bloque único", () => {
     expect(find(root, (n) => n.tagName === "path")).toBeUndefined();
   });
 });
+
+describe("buildProjectAstFromPages — multi-página", () => {
+  it("crea varias páginas con un Kit global compartido", async () => {
+    const { buildProjectAstFromPages } = await import("../html-to-ast");
+    const mk = (t: string) =>
+      `<html><head><style>.t{color:#01125B;font-family:Montserrat;font-size:40px}</style></head><body><h1 class="t">${t}</h1></body></html>`;
+    const project = buildProjectAstFromPages(
+      [
+        { name: "home", html: mk("Home") },
+        { name: "about", html: mk("About") },
+      ],
+      "MiSitio",
+      { idFactory: seededIds() },
+    );
+    expect(project.pages).toHaveLength(2);
+    expect(project.pages.map((p) => p.name)).toEqual(["home", "about"]);
+    // color compartido: un único global referenciado por ambas páginas
+    const c = project.globalSystem.colors.find((x) => x.value === "#01125B");
+    expect(c).toBeDefined();
+    const h1a = project.pages[0]!.root.children.find((n) => n.tagName === "h1")!;
+    const h1b = project.pages[1]!.root.children.find((n) => n.tagName === "h1")!;
+    expect(h1a.globalRefs?.color).toBe(c!.id);
+    expect(h1b.globalRefs?.color).toBe(c!.id);
+  });
+});

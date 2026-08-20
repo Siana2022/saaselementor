@@ -16,6 +16,7 @@ export function IngestPanel() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Error de ingesta");
     setProject(ProjectAstSchema.parse(data.project), data.css ?? "");
+    return data as { pageCount?: number };
   }
 
   async function ingestHtml() {
@@ -45,8 +46,9 @@ export function IngestPanel() {
       form.append("file", file);
       form.append("name", file.name.replace(/\.zip$/i, ""));
       const res = await fetch("/api/ingest", { method: "POST", body: form });
-      await handleResponse(res);
-      setInfo(`ZIP "${file.name}" procesado.`);
+      const data = await handleResponse(res);
+      const n = data.pageCount ?? 1;
+      setInfo(`ZIP "${file.name}" procesado — ${n} página${n === 1 ? "" : "s"}. (El lienzo muestra la primera; el ZIP exporta todas.)`);
     } catch (e) {
       setError((e as Error).message);
     } finally {

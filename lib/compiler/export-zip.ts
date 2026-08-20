@@ -18,7 +18,9 @@ import type { ProjectAst } from "@/lib/core/ast/types";
 import { compileProject, type CompileOptions } from "./compile";
 import { KitDocumentSchema, ManifestSchema } from "./elementor-types";
 
-const ELEMENTOR_VERSION = "3.25.0";
+// Versiones que replican un Website Kit real que importa correctamente.
+const KIT_FORMAT_VERSION = "3.0"; // formato import/export kit (crítico para el importador)
+const ELEMENTOR_VERSION = "4.2.2";
 
 const HELLO_THEME = {
   name: "Hello Elementor",
@@ -53,14 +55,19 @@ export function buildFileMap(project: ProjectAst, opts: CompileOptions = {}): Re
   let nextId = 100;
   for (const d of bundle.documents) {
     const id = String(nextId++);
-    const kitDoc = KitDocumentSchema.parse({ content: d.doc.content, settings: [], metadata: [] });
-    const json = JSON.stringify(kitDoc, null, 2);
 
     if (d.type === "page") {
-      files[`content/page/${id}.json`] = json;
+      // Las páginas llevan settings de página (objeto), como en un kit real.
+      const kitDoc = KitDocumentSchema.parse({
+        content: d.doc.content,
+        settings: { template: "default" },
+        metadata: [],
+      });
+      files[`content/page/${id}.json`] = JSON.stringify(kitDoc, null, 2);
       manifestPages[id] = { title: d.title, doc_type: "wp-page", thumbnail: false, url: "", terms: [] };
     } else {
-      files[`templates/${id}.json`] = json;
+      const kitDoc = KitDocumentSchema.parse({ content: d.doc.content, settings: [], metadata: [] });
+      files[`templates/${id}.json`] = JSON.stringify(kitDoc, null, 2);
       manifestTemplates[id] = { title: d.title, doc_type: d.type, thumbnail: false };
     }
   }
@@ -70,7 +77,7 @@ export function buildFileMap(project: ProjectAst, opts: CompileOptions = {}): Re
     title: project.name,
     description: null,
     author: "HTML → Elementor SaaS",
-    version: "1.0",
+    version: KIT_FORMAT_VERSION,
     elementor_version: ELEMENTOR_VERSION,
     thumbnail: false,
     theme: HELLO_THEME,

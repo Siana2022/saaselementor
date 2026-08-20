@@ -95,37 +95,23 @@ async function inlineCssUrls(css: string, cssDir: string, zip: JSZip): Promise<s
   return out;
 }
 
-export interface ZipIngestResult {
+export interface ZipPage {
   /** HTML autocontenido (CSS inyectado, imágenes embebidas). */
   html: string;
-  /** Nombre del HTML principal encontrado. */
+  /** Nombre del archivo HTML de origen. */
   fileName: string;
-  /** Nombre sugerido para el proyecto. */
+  /** Nombre sugerido para la página. */
   name: string;
 }
 
-/** Convierte un ZIP en un HTML autocontenido listo para `buildProjectAst`. */
-export async function ingestZipToHtml(buffer: Uint8Array | ArrayBuffer): Promise<ZipIngestResult> {
-  const zip = await JSZip.loadAsync(buffer);
-
-  // 1) Localiza el HTML principal.
-  const htmlPaths = Object.keys(zip.files).filter(
-    (p) => !zip.files[p]?.dir && /\.html?$/i.test(p),
-  );
-  if (htmlPaths.length === 0) {
-    throw new Error("El ZIP no contiene ningún archivo .html");
-  }
-  const mainPath =
-    htmlPaths.find((p) => /(^|\/)index\.html?$/i.test(p)) ??
-    htmlPaths.sort((a, b) => a.split("/").length - b.split("/").length)[0]!;
-
+/** Convierte UN archivo HTML del ZIP en HTML autocontenido. */
+async function selfContainedHtml(zip: JSZip, mainPath: string): Promise<string> {
   const baseDir = dirName(mainPath);
   const rawHtml = await zip.file(mainPath)!.async("string");
   const $ = cheerio.load(rawHtml);
 
-  // 2) Resuelve <link rel="stylesheet"> -> <style> (con url() embebidas).
-  const links = $('link[rel="stylesheet"][href]').toArray();
-  for (const el of links) {
+  // <link rel="stylesheet"> -> <style> (con url() embebidas).
+  for (const el of $('link[rel="stylesheet"][href]').toArray()) {
     const href = $(el).attr("href") ?? "";
     const resolved = resolvePath(baseDir, href);
     if (!resolved) continue;
@@ -136,9 +122,8 @@ export async function ingestZipToHtml(buffer: Uint8Array | ArrayBuffer): Promise
     $(el).replaceWith(`<style data-from="${href}">${inlined}</style>`);
   }
 
-  // 3) Reescribe <img src> a data URIs.
-  const imgs = $("img[src]").toArray();
-  for (const el of imgs) {
+  // <img src> -> data URI.
+  for (const el of $("img[src]").toArray()) {
     const src = $(el).attr("src") ?? "";
     const resolved = resolvePath(baseDir, src);
     if (!resolved) continue;
@@ -146,5 +131,34 @@ export async function ingestZipToHtml(buffer: Uint8Array | ArrayBuffer): Promise
     if (dataUri) $(el).attr("src", dataUri);
   }
 
-  return { html: $.html(), fileName: mainPath, name: baseName(mainPath) || "home" };
+  return $.html();
+}
+
+/** Lista los HTML del ZIP (index.html primero, luego por profundidad). */
+function htmlPaths(zip: JSZip): string[] {
+  const paths = Object.keys(zip.files).filter((p) => !zip.files[p]?.dir && /\.html?$/i.test(p));
+  return paths.sort((a, b) => {
+    const ai = /(^|\/)index\.html?$/i.test(a) ? 0 : 1;
+    const bi = /(^|\/)index\.html?$/i.test(b) ? 0 : 1;
+    if (ai !== bi) return ai - bi;
+    return a.split("/").length - b.split("/").length || a.localeCompare(b);
+  });
+}
+
+/** Ingesta de TODAS las páginas HTML del ZIP (cada una autocontenida). */
+export async function ingestZipAll(buffer: Uint8Array | ArrayBuffer): Promise<ZipPage[]> {
+  const zip = await JSZip.loadAsync(buffer);
+  const paths = htmlPaths(zip);
+  if (paths.length === 0) throw new Error("El ZIP no contiene ningún archivo .html");
+  const pages: ZipPage[] = [];
+  for (const path of paths) {
+    pages.push({ html: await selfContainedHtml(zip, path), fileName: path, name: baseName(path) || "page" });
+  }
+  return pages;
+}
+
+/** Ingesta del HTML principal del ZIP (compatibilidad; una sola página). */
+export async function ingestZipToHtml(buffer: Uint8Array | ArrayBuffer): Promise<ZipPage> {
+  const pages = await ingestZipAll(buffer);
+  return pages[0]!;
 }

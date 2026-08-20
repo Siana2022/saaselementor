@@ -77,10 +77,11 @@ function forEachNode(node: AstNode, fn: (n: AstNode) => void): void {
  * con los ya existentes (p. ej. de :root). Devuelve un nuevo GlobalSystemAst.
  */
 export function deriveGlobalsFromUsage(
-  root: AstNode,
+  roots: AstNode | AstNode[],
   existing: GlobalSystemAst,
   idFactory: () => string,
 ): GlobalSystemAst {
+  const rootList = Array.isArray(roots) ? roots : [roots];
   // --- Colores ---
   const colorFreq = new Map<string, { value: string; count: number }>();
   const bump = (map: Map<string, { value: string; count: number }>, key: string, value: string) => {
@@ -91,19 +92,21 @@ export function deriveGlobalsFromUsage(
 
   const typoFreq = new Map<string, { sample: AstNode; count: number }>();
 
-  forEachNode(root, (n) => {
-    if (n.nodeType !== "element") return;
-    const c = n.styles["color"];
-    if (c && isColor(c)) bump(colorFreq, normColor(c), c);
-    const bg = bgColorOf(n.styles);
-    if (bg) bump(colorFreq, normColor(bg), bg);
-    const tk = typoKey(n.styles);
-    if (tk) {
-      const e = typoFreq.get(tk);
-      if (e) e.count += 1;
-      else typoFreq.set(tk, { sample: n, count: 1 });
-    }
-  });
+  for (const root of rootList) {
+    forEachNode(root, (n) => {
+      if (n.nodeType !== "element") return;
+      const c = n.styles["color"];
+      if (c && isColor(c)) bump(colorFreq, normColor(c), c);
+      const bg = bgColorOf(n.styles);
+      if (bg) bump(colorFreq, normColor(bg), bg);
+      const tk = typoKey(n.styles);
+      if (tk) {
+        const e = typoFreq.get(tk);
+        if (e) e.count += 1;
+        else typoFreq.set(tk, { sample: n, count: 1 });
+      }
+    });
+  }
 
   const existingColorNorms = new Set(existing.colors.map((c) => normColor(c.value)));
   const newColors: GlobalColor[] = [...colorFreq.values()]

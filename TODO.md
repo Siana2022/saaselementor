@@ -45,6 +45,9 @@ Pendiente: afinar mapeos exactos de Elementor con **fixtures reales** del usuari
 - [x] Fase 2: transferencia de estilos computados a settings de Elementor.
 - [x] Fase 3: globales por uso (colores/tipografías) + enlazado de globalRefs (DRY).
 
+## Import validity
+- [x] manifest.version=3.0 (formato kit real) + page settings como objeto {template}.
+
 ## Pendiente
 - [x] Fixtures reales (páginas + Website Kit) + `scripts/analyze-fixture.ts`.
 - [x] Kit real: `site-settings.json` (system/custom colors + typography).

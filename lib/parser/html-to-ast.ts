@@ -346,34 +346,69 @@ export function htmlToPageAst(
  * Fase 1 (extractGlobalSystem sobre el CSS embebido) + Fase 2 (htmlToAst con
  * enlazado de globalRefs).
  */
+/** Una página de entrada para la construcción multi-página. */
+export interface InputPage {
+  name: string;
+  html: string;
+  fileName?: string;
+}
+
+/**
+ * Construye un ProjectAst a partir de VARIAS páginas HTML, con un ÚNICO sistema
+ * global compartido (colores/tipografías derivados del uso en todas las páginas).
+ */
+export function buildProjectAstFromPages(
+  pages: InputPage[],
+  projectName: string,
+  options: HtmlParseOptions = {},
+): ProjectAst {
+  const idFactory = options.idFactory ?? uuidv4;
+
+  // 1) Parsea cada página (estilos computados; sin enlazar globales todavía).
+  const parsed = pages.map((p) => {
+    const css = collectStyleCss(p.html);
+    const root = htmlToAst(p.html, { ...options, idFactory, css, globalSystem: undefined });
+    return { ...p, root };
+  });
+
+  // 2) Globales: base desde :root (CSS de todas) + derivados por uso agregado.
+  const cssAll = pages.map((p) => collectStyleCss(p.html)).join("\n");
+  const base = extractGlobalSystem(cssAll, { idFactory });
+  const globalSystem = deriveGlobalsFromUsage(
+    parsed.map((p) => p.root),
+    base,
+    idFactory,
+  );
+
+  // 3) Enlaza globalRefs en cada página.
+  for (const p of parsed) linkGlobalRefsUsage(p.root, globalSystem);
+
+  const pageAsts = parsed.map((p) =>
+    PageAstSchema.parse({
+      id: idFactory(),
+      name: p.name,
+      root: p.root,
+      source: { fileName: p.fileName, templateType: "page" },
+    }),
+  );
+
+  return ProjectAstSchema.parse({
+    id: idFactory(),
+    name: projectName,
+    globalSystem,
+    pages: pageAsts,
+  });
+}
+
+/** Construye un ProjectAst desde un único HTML (envoltura de la versión multi). */
 export function buildProjectAst(
   html: string,
   meta: { name: string; fileName?: string },
   options: HtmlParseOptions = {},
 ): ProjectAst {
-  const idFactory = options.idFactory ?? uuidv4;
-  const css = collectStyleCss(html);
-
-  // 1) AST con estilos computados (sin enlazar globales todavía).
-  const root = htmlToAst(html, { ...options, idFactory, css, globalSystem: undefined });
-
-  // 2) Globales: base desde :root + derivados por frecuencia de uso.
-  const base = extractGlobalSystem(css, { idFactory });
-  const globalSystem = deriveGlobalsFromUsage(root, base, idFactory);
-
-  // 3) Enlaza globalRefs (color/fondo/tipografía) en cada nodo.
-  linkGlobalRefsUsage(root, globalSystem);
-
-  const page = PageAstSchema.parse({
-    id: idFactory(),
-    name: meta.name,
-    root,
-    source: { fileName: meta.fileName, templateType: "page" },
-  });
-  return ProjectAstSchema.parse({
-    id: idFactory(),
-    name: meta.name,
-    globalSystem,
-    pages: [page],
-  });
+  return buildProjectAstFromPages(
+    [{ name: meta.name, html, fileName: meta.fileName }],
+    meta.name,
+    options,
+  );
 }

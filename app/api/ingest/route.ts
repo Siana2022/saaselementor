@@ -5,9 +5,9 @@
  * Devuelve { project, css }.
  */
 import { NextResponse } from "next/server";
-import { buildProjectAst } from "@/lib/parser/html-to-ast";
+import { buildProjectAst, buildProjectAstFromPages } from "@/lib/parser/html-to-ast";
 import { collectStyleCss } from "@/lib/parser/global-system";
-import { ingestZipToHtml } from "@/lib/parser/ingest-zip";
+import { ingestZipAll } from "@/lib/parser/ingest-zip";
 
 export const runtime = "nodejs";
 
@@ -23,12 +23,17 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Falta el archivo ZIP" }, { status: 400 });
       }
       const buffer = new Uint8Array(await file.arrayBuffer());
-      const { html, fileName, name } = await ingestZipToHtml(buffer);
+      const pages = await ingestZipAll(buffer);
       const projectName =
-        (typeof form.get("name") === "string" && (form.get("name") as string)) || name;
-      const project = buildProjectAst(html, { name: projectName, fileName });
-      const css = collectStyleCss(html);
-      return NextResponse.json({ project, css });
+        (typeof form.get("name") === "string" && (form.get("name") as string)) ||
+        "proyecto";
+      const project = buildProjectAstFromPages(
+        pages.map((p) => ({ name: p.name, html: p.html, fileName: p.fileName })),
+        projectName,
+      );
+      // CSS de la primera página para el preview del lienzo.
+      const css = pages[0] ? collectStyleCss(pages[0].html) : "";
+      return NextResponse.json({ project, css, pageCount: pages.length });
     }
 
     // --- Ingesta de HTML pegado ---

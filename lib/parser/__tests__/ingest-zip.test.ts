@@ -69,3 +69,22 @@ describe("ingestZipToHtml", () => {
     await expect(ingestZipToHtml(zip)).rejects.toThrow(/html/i);
   });
 });
+
+describe("ingestZipAll — multi-página", () => {
+  it("procesa TODAS las páginas HTML del ZIP", async () => {
+    const zip = await makeZip({
+      "index.html": `<html><head><link rel="stylesheet" href="s.css"></head><body><h1>Home</h1></body></html>`,
+      "about.html": `<html><head><link rel="stylesheet" href="s.css"></head><body><h1>About</h1></body></html>`,
+      "blog/post.html": `<body><p>post</p></body>`,
+      "s.css": `h1{color:#0af}`,
+    });
+    const { ingestZipAll } = await import("../ingest-zip");
+    const pages = await ingestZipAll(zip);
+    expect(pages).toHaveLength(3);
+    // index.html va primero
+    expect(pages[0]!.fileName).toBe("index.html");
+    expect(pages.map((p) => p.name).sort()).toEqual(["about", "index", "post"]);
+    // el CSS externo se inyecta en cada una que lo enlaza
+    expect(pages[0]!.html).toContain("color:#0af");
+  });
+});
