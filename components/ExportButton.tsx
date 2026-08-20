@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useProjectStore } from "@/lib/store/project-store";
+import { exportProjectZip } from "@/lib/compiler/export-zip";
 
 export function ExportButton() {
   const project = useProjectStore((s) => s.project);
@@ -10,24 +11,18 @@ export function ExportButton() {
     if (!project || busy) return;
     setBusy(true);
     try {
-      const res = await fetch("/api/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Error al exportar");
-      }
-      const blob = await res.blob();
+      // Compilación + ZIP 100% en el cliente (sin límites de serverless).
+      const bytes = await exportProjectZip(project);
+      const blob = new Blob([new Uint8Array(bytes)], { type: "application/zip" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${project.name}-elementor-kit.zip`;
+      a.download = `${project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "kit"}-elementor-kit.zip`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert((e as Error).message);
+      console.error("Export error:", e);
+      alert(`Error al exportar: ${(e as Error).message}`);
     } finally {
       setBusy(false);
     }
