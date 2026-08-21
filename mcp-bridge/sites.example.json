@@ -1,0 +1,10 @@
+{
+  "sites": {
+    "ceivan-staging": {
+      "url": "https://pretty-blue-whale.5-9-221-129.cpanel.site",
+      "user": "TU_USUARIO",
+      "app_password": "xxxx xxxx xxxx xxxx"
+    }
+  },
+  "default": "ceivan-staging"
+}
