@@ -69,9 +69,19 @@ Eso es todo: no has tenido que editar ningún archivo.
 
 ---
 
+## PARTE 3.5 · Cargar "la receta" (una vez, para que salga clavado)
+
+Para que Claude monte con calidad (y no improvise), dale la receta:
+
+1. En Claude Desktop, crea un **Proyecto** llamado *"Elementor Builder"*.
+2. Abre el archivo **`RECETA-ELEMENTOR.md`** (viene en el paquete), copia **todo** su
+   contenido y pégalo en las **Instrucciones** del proyecto. Guarda.
+3. A partir de ahí, **trabaja siempre dentro de ese proyecto**: Claude ya sabrá
+   construir Elementor bien.
+
 ## PARTE 4 · Trabajar (cada día)
 
-1. Abre **Claude Desktop** y empieza un chat.
+1. Abre **Claude Desktop**, entra en el proyecto **"Elementor Builder"** y empieza un chat.
 2. Comprueba la conexión escribiendo:
    > *Usa wp_ping en el sitio cliente-ceivan.*
    Debe responder con la versión de Elementor. ✅
